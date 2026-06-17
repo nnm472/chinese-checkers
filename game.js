@@ -5,6 +5,13 @@
   const VIEW_W = 1000;
   const VIEW_H = 1292;
   const BOARD = { x: 84, y: 126, w: 832, h: 1040 };
+  const OUTER_GUTTER = 28;
+  const DROP_BOUNDS = {
+    x: BOARD.x - OUTER_GUTTER,
+    y: BOARD.y - OUTER_GUTTER,
+    w: BOARD.w + OUTER_GUTTER * 2,
+    h: BOARD.h + OUTER_GUTTER * 2,
+  };
   const GRID_COLS = 8;
   const GRID_ROWS = 10;
   const MAX_DRAG = 178;
@@ -515,10 +522,10 @@
 
   function isOutside(piece) {
     return (
-      piece.x < BOARD.x ||
-      piece.x > BOARD.x + BOARD.w ||
-      piece.y < BOARD.y ||
-      piece.y > BOARD.y + BOARD.h
+      piece.x < DROP_BOUNDS.x ||
+      piece.x > DROP_BOUNDS.x + DROP_BOUNDS.w ||
+      piece.y < DROP_BOUNDS.y ||
+      piece.y > DROP_BOUNDS.y + DROP_BOUNDS.h
     );
   }
 
@@ -641,11 +648,18 @@
     ctx.fillRect(24, 24, VIEW_W - 48, VIEW_H - 48);
     ctx.restore();
 
-    roundedRect(ctx, BOARD.x, BOARD.y, BOARD.w, BOARD.h, 10);
+    roundedRect(ctx, DROP_BOUNDS.x, DROP_BOUNDS.y, DROP_BOUNDS.w, DROP_BOUNDS.h, 12);
+    ctx.fillStyle = "rgba(72, 42, 18, 0.14)";
+    ctx.fill();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(36, 22, 12, 0.92)";
+    ctx.stroke();
+
+    roundedRect(ctx, BOARD.x, BOARD.y, BOARD.w, BOARD.h, 8);
     ctx.fillStyle = "rgba(255, 223, 155, 0.18)";
     ctx.fill();
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = "rgba(48, 28, 13, 0.9)";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(48, 28, 13, 0.78)";
     ctx.stroke();
 
     drawGrid();
@@ -680,8 +694,8 @@
     ctx.lineWidth = 6;
     const midY = BOARD.y + BOARD.h / 2;
     ctx.beginPath();
-    ctx.moveTo(BOARD.x - 18, midY);
-    ctx.lineTo(BOARD.x + BOARD.w + 18, midY);
+    ctx.moveTo(DROP_BOUNDS.x, midY);
+    ctx.lineTo(DROP_BOUNDS.x + DROP_BOUNDS.w, midY);
     ctx.stroke();
     ctx.restore();
   }
