@@ -333,14 +333,15 @@
     el.skillButtons.forEach((button) => {
       const team = button.dataset.team;
       const skill = SKILLS[button.dataset.skill];
+      if (!team || !skill) return;
       const points = state.skillPoints[team] || 0;
       const shownPoints = Math.min(points, skill.cost);
       const ratio = Math.min(points / skill.cost, 1);
       const fill = button.querySelector(".skill-fill");
       const meter = button.querySelector(".skill-meter");
 
-      fill.style.setProperty("--fill", `${Math.round(ratio * 100)}%`);
-      meter.textContent = `${shownPoints}/${skill.cost}`;
+      if (fill) fill.style.setProperty("--fill", `${Math.round(ratio * 100)}%`);
+      if (meter) meter.textContent = `${shownPoints}/${skill.cost}`;
       button.classList.toggle("is-ready", points >= skill.cost);
       button.title =
         points >= skill.cost
@@ -361,6 +362,7 @@
 
   function showSkillAnnouncement(team, icon, text) {
     window.clearTimeout(state.announcementTimer);
+    if (!el.skillAnnouncement) return;
     el.skillAnnouncement.dataset.team = team;
     el.skillAnnouncementIcon.textContent = icon;
     el.skillAnnouncementTeam.textContent = `${COLORS[team].name}の技`;
@@ -1196,6 +1198,7 @@
     });
     el.skillButtons.forEach((button) => {
       button.addEventListener("click", () => {
+        if (!button.dataset.team || !button.dataset.skill) return;
         tryUseSkill(button.dataset.team, button.dataset.skill);
       });
     });
