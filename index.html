@@ -19,7 +19,7 @@
       </header>
 
       <main class="game-shell" aria-label="対戦画面">
-        <section class="player-panel player-panel--green" aria-label="緑チーム">
+        <section class="player-panel player-panel--green facing-green" aria-label="緑チーム">
           <div class="player-main">
             <span class="team-dot team-dot--green"></span>
             <span class="player-name">緑</span>
@@ -30,7 +30,7 @@
           </div>
         </section>
 
-        <section class="skill-row skill-row--top" aria-label="緑チームのスキル">
+        <section class="skill-row skill-row--top facing-green" aria-label="緑チームのスキル">
           <button class="skill-button" type="button" data-team="green" data-skill="power">
             <span class="skill-fill"></span>
             <span class="skill-label">強</span>
@@ -53,13 +53,18 @@
           </button>
         </section>
 
-        <div class="turn-strip" id="turnStrip">
-          <span id="turnLabel">赤の手番</span>
-          <span id="statusLabel">コマを選択</span>
+        <div class="turn-strip turn-strip--green facing-green" id="greenTurnStrip">
+          <span id="greenTurnLabel">緑の手番</span>
+          <span id="greenStatusLabel">待機中</span>
         </div>
 
         <div class="board-frame">
           <canvas id="gameCanvas" width="1000" height="1292" aria-label="ゲーム盤"></canvas>
+        </div>
+
+        <div class="turn-strip turn-strip--red" id="redTurnStrip">
+          <span id="redTurnLabel">赤の手番</span>
+          <span id="redStatusLabel">コマを選択</span>
         </div>
 
         <section class="skill-row skill-row--bottom" aria-label="赤チームのスキル">
@@ -108,7 +113,8 @@
         <h2>中国のチェッカー</h2>
         <p class="screen-copy">引いて、弾いて、盤外へ。</p>
         <div class="screen-actions">
-          <button class="primary-button" id="startButton" type="button">対戦開始</button>
+          <button class="primary-button" id="singleStartButton" type="button">1人プレイ</button>
+          <button class="primary-button" id="twoPlayerStartButton" type="button">2人対戦</button>
           <button class="secondary-button" id="tutorialButton" type="button">チュートリアル</button>
         </div>
       </div>

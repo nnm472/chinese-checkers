@@ -75,7 +75,8 @@
     tutorialScreen: document.getElementById("tutorialScreen"),
     pauseScreen: document.getElementById("pauseScreen"),
     resultScreen: document.getElementById("resultScreen"),
-    startButton: document.getElementById("startButton"),
+    singleStartButton: document.getElementById("singleStartButton"),
+    twoPlayerStartButton: document.getElementById("twoPlayerStartButton"),
     tutorialButton: document.getElementById("tutorialButton"),
     pauseButton: document.getElementById("pauseButton"),
     helpButton: document.getElementById("helpButton"),
@@ -91,9 +92,12 @@
     skillAnnouncementIcon: document.getElementById("skillAnnouncementIcon"),
     skillAnnouncementTeam: document.getElementById("skillAnnouncementTeam"),
     skillAnnouncementText: document.getElementById("skillAnnouncementText"),
-    turnStrip: document.getElementById("turnStrip"),
-    turnLabel: document.getElementById("turnLabel"),
-    statusLabel: document.getElementById("statusLabel"),
+    redTurnStrip: document.getElementById("redTurnStrip"),
+    greenTurnStrip: document.getElementById("greenTurnStrip"),
+    redTurnLabel: document.getElementById("redTurnLabel"),
+    greenTurnLabel: document.getElementById("greenTurnLabel"),
+    redStatusLabel: document.getElementById("redStatusLabel"),
+    greenStatusLabel: document.getElementById("greenStatusLabel"),
     redCount: document.getElementById("redCount"),
     greenCount: document.getElementById("greenCount"),
     tutorialArt: document.getElementById("tutorialArt"),
@@ -165,6 +169,10 @@
     lastTime: performance.now(),
     tutorialIndex: 0,
     overlay: "title",
+    mode: "twoPlayer",
+    cpuTeam: "green",
+    cpuThinking: false,
+    cpuTimer: null,
     sound: true,
     skillPoints: {
       red: 0,
@@ -280,11 +288,15 @@
     });
   }
 
-  function resetGame() {
+  function resetGame(mode = state.mode) {
+    window.clearTimeout(state.cpuTimer);
     state.pieces = [];
     state.effects = [];
     state.turn = "red";
     state.phase = "ready";
+    state.mode = mode;
+    state.cpuThinking = false;
+    state.cpuTimer = null;
     state.selected = null;
     state.pointer = null;
     state.settleTime = 0;
@@ -304,29 +316,51 @@
     return state.pieces.filter((piece) => piece.active && piece.team === team);
   }
 
+  function isCpuTurn() {
+    return (
+      state.mode === "singlePlayer" &&
+      state.turn === state.cpuTeam &&
+      state.phase === "ready" &&
+      !state.overlay
+    );
+  }
+
+  function currentStatusText() {
+    if (isCpuTurn() || state.cpuThinking) return "CPU思考中";
+    if (state.phase === "ready") {
+      return state.powerBoostTeam === state.turn ? "強化中" : "コマを選択";
+    }
+    if (state.phase === "aiming") return "狙いを決める";
+    if (state.phase === "moving") return "移動中";
+    if (state.phase === "selectGrow") return "育てるコマを選択";
+    if (state.phase === "selectSteal") return "奪うコマを選択";
+    return "待機中";
+  }
+
+  function setStatusText(text) {
+    if (state.turn === "red") {
+      el.redStatusLabel.textContent = text;
+    } else {
+      el.greenStatusLabel.textContent = text;
+    }
+  }
+
   function updateHud() {
     const red = livePieces("red").length;
     const green = livePieces("green").length;
     el.redCount.textContent = String(red);
     el.greenCount.textContent = String(green);
-    el.turnLabel.textContent = `${COLORS[state.turn].name}の手番`;
-    el.turnStrip.style.borderColor =
-      state.turn === "red" ? "rgba(230, 72, 91, 0.5)" : "rgba(53, 196, 122, 0.5)";
+    el.redTurnLabel.textContent = state.turn === "red" ? "赤の手番" : "赤は待機";
+    el.greenTurnLabel.textContent = state.turn === "green" ? "緑の手番" : "緑は待機";
+    el.redTurnStrip.classList.toggle("is-active", state.turn === "red");
+    el.greenTurnStrip.classList.toggle("is-active", state.turn === "green");
 
-    if (state.phase === "ready") {
-      el.statusLabel.textContent =
-        state.powerBoostTeam === state.turn ? "強化中" : "コマを選択";
-    } else if (state.phase === "aiming") {
-      el.statusLabel.textContent = "狙いを決める";
-    } else if (state.phase === "moving") {
-      el.statusLabel.textContent = "移動中";
-    } else if (state.phase === "selectGrow") {
-      el.statusLabel.textContent = "育てるコマを選択";
-    } else if (state.phase === "selectSteal") {
-      el.statusLabel.textContent = "奪うコマを選択";
-    }
+    const status = currentStatusText();
+    el.redStatusLabel.textContent = state.turn === "red" ? status : "待機中";
+    el.greenStatusLabel.textContent = state.turn === "green" ? status : "待機中";
 
     updateSkillMeters();
+    maybeStartCpuTurn();
   }
 
   function updateSkillMeters() {
@@ -360,15 +394,15 @@
     updateHud();
   }
 
-  function showSkillAnnouncement(team, icon, text) {
+  function showSkillAnnouncement(team, icon, text, duration = 1800) {
     window.clearTimeout(state.announcementTimer);
     if (!el.skillAnnouncement) return;
     el.skillAnnouncement.dataset.team = team;
     el.skillAnnouncementIcon.textContent = icon;
-    el.skillAnnouncementTeam.textContent = `${COLORS[team].name}の技`;
+    el.skillAnnouncementTeam.textContent = `${COLORS[team].name}が「${icon}」を発動`;
     el.skillAnnouncementText.textContent = text;
     el.skillAnnouncement.classList.remove("hidden");
-    state.announcementTimer = window.setTimeout(hideSkillAnnouncement, 1200);
+    state.announcementTimer = window.setTimeout(hideSkillAnnouncement, duration);
   }
 
   function hideSkillAnnouncement() {
@@ -388,15 +422,19 @@
     const skill = SKILLS[skillKey];
     const points = state.skillPoints[team] || 0;
     if (state.overlay || state.phase !== "ready") {
-      el.statusLabel.textContent = "今は使えません";
+      setStatusText("今は使えません");
       return;
     }
     if (team !== state.turn) {
-      el.statusLabel.textContent = "相手の手番です";
+      setStatusText("相手の手番です");
+      return;
+    }
+    if (team === state.cpuTeam && state.mode === "singlePlayer") {
+      setStatusText("CPUは技を使いません");
       return;
     }
     if (points < skill.cost) {
-      el.statusLabel.textContent = `あと${skill.cost - points}ポイント`;
+      setStatusText(`あと${skill.cost - points}ポイント`);
       return;
     }
 
@@ -404,22 +442,26 @@
 
     if (skillKey === "power") {
       state.powerBoostTeam = team;
-      showSkillAnnouncement(team, skill.label, "このターン、威力が50%アップ");
+      showSkillAnnouncement(team, skill.label, "この手番だけ、引ける距離2倍・威力50%アップ");
       updateHud();
+      setStatusText("強 発動: 威力50%アップ");
     } else if (skillKey === "rest") {
       state.skipCredits[team] += 1;
-      showSkillAnnouncement(team, skill.label, "相手の手番を1回スキップ");
+      showSkillAnnouncement(team, skill.label, "この手番の後、相手の手番を1回スキップ");
       updateHud();
+      setStatusText("休 発動: 次も自分の番");
     } else if (skillKey === "grow") {
       state.pendingSkill = { team, skillKey };
       state.phase = "selectGrow";
-      showSkillAnnouncement(team, skill.label, "自分のコマを1個選んで大きくする");
+      showSkillAnnouncement(team, skill.label, "自分のコマを1個選んで大きくする", 2200);
       updateHud();
+      setStatusText("育 発動: 自分のコマを選択");
     } else if (skillKey === "steal") {
       state.pendingSkill = { team, skillKey };
       state.phase = "selectSteal";
-      showSkillAnnouncement(team, skill.label, "相手のコマを1個選んで奪う");
+      showSkillAnnouncement(team, skill.label, "相手のコマを1個選んで自分の色にする", 2200);
       updateHud();
+      setStatusText("奪 発動: 相手のコマを選択");
     }
   }
 
@@ -474,8 +516,8 @@
     el.resultScreen.classList.toggle("hidden", name !== "result");
   }
 
-  function startMatch() {
-    resetGame();
+  function startMatch(mode = state.mode) {
+    resetGame(mode);
     setOverlay(null);
   }
 
@@ -554,6 +596,135 @@
     return !state.overlay && state.phase === "ready";
   }
 
+  function maybeStartCpuTurn() {
+    if (!isCpuTurn() || state.cpuThinking) return;
+    state.cpuThinking = true;
+    updateHudForCpuThinking();
+    state.cpuTimer = window.setTimeout(() => {
+      state.cpuThinking = false;
+      state.cpuTimer = null;
+      if (isCpuTurn()) runCpuTurn();
+    }, 720);
+  }
+
+  function updateHudForCpuThinking() {
+    if (state.turn === "green") {
+      el.greenStatusLabel.textContent = "CPU思考中";
+    } else {
+      el.redStatusLabel.textContent = "CPU思考中";
+    }
+  }
+
+  function distancePointToSegment(point, start, end) {
+    const vx = end.x - start.x;
+    const vy = end.y - start.y;
+    const wx = point.x - start.x;
+    const wy = point.y - start.y;
+    const lenSq = vx * vx + vy * vy || 1;
+    const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / lenSq));
+    const px = start.x + vx * t;
+    const py = start.y + vy * t;
+    return Math.hypot(point.x - px, point.y - py);
+  }
+
+  function segmentNearRect(start, end, rect, padding) {
+    const samples = 12;
+    for (let i = 0; i <= samples; i += 1) {
+      const t = i / samples;
+      const x = start.x + (end.x - start.x) * t;
+      const y = start.y + (end.y - start.y) * t;
+      if (
+        x >= rect.x - padding &&
+        x <= rect.x + rect.w + padding &&
+        y >= rect.y - padding &&
+        y <= rect.y + rect.h + padding
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function isCpuLineClear(piece, target) {
+    const start = { x: piece.x, y: piece.y };
+    const end = { x: target.x, y: target.y };
+    const ownPieces = livePieces(piece.team).filter((item) => item !== piece);
+    const friendInWay = ownPieces.some((item) => {
+      const dist = distancePointToSegment({ x: item.x, y: item.y }, start, end);
+      return dist < item.r + piece.r + 12;
+    });
+    if (friendInWay) return false;
+
+    return !BUMPERS.some((bumper) => segmentNearRect(start, end, bumper, piece.r + 8));
+  }
+
+  function chooseCpuShot() {
+    const own = livePieces(state.cpuTeam);
+    const opponentTeam = state.cpuTeam === "red" ? "green" : "red";
+    const enemies = livePieces(opponentTeam);
+    const candidates = [];
+
+    own.forEach((piece) => {
+      enemies.forEach((target) => {
+        const dist = Math.hypot(target.x - piece.x, target.y - piece.y);
+        if (isCpuLineClear(piece, target)) {
+          candidates.push({ piece, target, dist, kind: "attack" });
+        }
+      });
+    });
+
+    candidates.sort((a, b) => a.dist - b.dist);
+    if (candidates.length) return candidates[0];
+
+    const center = { x: BOARD.x + BOARD.w / 2, y: BOARD.y + BOARD.h / 2 };
+    const safeCenterMoves = own
+      .filter((piece) => isCpuLineClear(piece, center))
+      .map((piece) => ({
+        piece,
+        target: center,
+        dist: Math.hypot(center.x - piece.x, center.y - piece.y),
+        kind: "center",
+      }))
+      .sort((a, b) => b.dist - a.dist);
+
+    if (safeCenterMoves.length) return safeCenterMoves[0];
+    if (!own.length) return null;
+
+    return {
+      piece: own[0],
+      target: center,
+      dist: Math.hypot(center.x - own[0].x, center.y - own[0].y),
+      kind: "center",
+    };
+  }
+
+  function launchPieceToward(piece, target, powerRatio) {
+    const dx = target.x - piece.x;
+    const dy = target.y - piece.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const ux = dx / dist;
+    const uy = dy / dist;
+    const massSpeedOffset = 0.84 + piece.mass * 0.07;
+    const virtualDrag = Math.min(getMaxDrag(piece) * powerRatio, dist * 0.55);
+    const launchScale = (8.35 * LAUNCH_POWER) / massSpeedOffset;
+    piece.vx = ux * virtualDrag * launchScale;
+    piece.vy = uy * virtualDrag * launchScale;
+    state.phase = "moving";
+    state.settleTime = 0;
+    playTone("launch", 0.85);
+    updateHud();
+  }
+
+  function runCpuTurn() {
+    const shot = chooseCpuShot();
+    if (!shot) {
+      finishTurn();
+      return;
+    }
+    const ratio = shot.kind === "attack" ? 0.78 : 0.45;
+    launchPieceToward(shot.piece, shot.target, ratio);
+  }
+
   function findPieceAt(point, teamFilter = state.turn) {
     for (let i = state.pieces.length - 1; i >= 0; i -= 1) {
       const piece = state.pieces[i];
@@ -578,6 +749,7 @@
 
   function onPointerDown(event) {
     if (state.overlay) return;
+    if (isCpuTurn() || state.cpuThinking) return;
     const point = worldPoint(event);
 
     if (state.phase === "selectGrow") {
@@ -1180,18 +1352,19 @@
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointercancel", onPointerUp);
 
-    el.startButton.addEventListener("click", startMatch);
+    el.singleStartButton.addEventListener("click", () => startMatch("singlePlayer"));
+    el.twoPlayerStartButton.addEventListener("click", () => startMatch("twoPlayer"));
     el.tutorialButton.addEventListener("click", openTutorial);
     el.helpButton.addEventListener("click", openTutorial);
     el.pauseButton.addEventListener("click", () => {
       if (state.overlay === "title" || state.overlay === "tutorial" || state.overlay === "result") return;
       setOverlay("pause");
     });
-    el.restartButton.addEventListener("click", startMatch);
+    el.restartButton.addEventListener("click", () => startMatch(state.mode));
     el.resumeButton.addEventListener("click", () => setOverlay(null));
-    el.pauseRestartButton.addEventListener("click", startMatch);
+    el.pauseRestartButton.addEventListener("click", () => startMatch(state.mode));
     el.backToTitleButton.addEventListener("click", showTitle);
-    el.rematchButton.addEventListener("click", startMatch);
+    el.rematchButton.addEventListener("click", () => startMatch(state.mode));
     el.resultTitleButton.addEventListener("click", showTitle);
     el.soundToggle.addEventListener("change", () => {
       state.sound = el.soundToggle.checked;

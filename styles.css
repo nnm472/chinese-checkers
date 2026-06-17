@@ -169,6 +169,10 @@ button {
   gap: 7px;
 }
 
+.facing-green {
+  transform: rotate(180deg);
+}
+
 .skill-button {
   min-height: 36px;
   background: rgba(255, 255, 255, 0.08);
@@ -270,6 +274,11 @@ button {
 .skill-announcement[data-team="green"] {
   --skill-ready: rgba(118, 238, 178, 0.96);
   --announce-color: var(--green);
+  transform: translate(-50%, -50%) rotate(180deg) scale(1);
+}
+
+.skill-announcement[data-team="green"].hidden {
+  transform: translate(-50%, -50%) rotate(180deg) scale(0.94);
 }
 
 .skill-announcement__icon {
@@ -317,10 +326,33 @@ button {
   font-weight: 900;
 }
 
-#statusLabel {
+#redStatusLabel,
+#greenStatusLabel {
   color: var(--muted);
   font-size: 0.84rem;
   text-align: right;
+}
+
+.turn-strip--red {
+  border-color: rgba(230, 72, 91, 0.22);
+}
+
+.turn-strip--green {
+  border-color: rgba(53, 196, 122, 0.22);
+}
+
+.turn-strip.is-active {
+  box-shadow: inset 0 0 0 1px currentColor, 0 0 18px rgba(255, 230, 160, 0.08);
+}
+
+.turn-strip--red.is-active {
+  color: #fff1e2;
+  border-color: rgba(230, 72, 91, 0.65);
+}
+
+.turn-strip--green.is-active {
+  color: #fff1e2;
+  border-color: rgba(53, 196, 122, 0.65);
 }
 
 .board-frame {
