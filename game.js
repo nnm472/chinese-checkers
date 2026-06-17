@@ -41,6 +41,7 @@
     small: { r: 19, mass: 1.0 },
     medium: { r: 27.5, mass: 1.95 },
     large: { r: 44.5, mass: 4.15 },
+    huge: { r: 53.5, mass: 5.35 },
   };
 
   const SKILLS = {
@@ -51,9 +52,17 @@
   };
 
   const DROP_SKILL_POINTS = {
-    small: 1,
-    medium: 3,
-    large: 5,
+    small: 2,
+    medium: 4,
+    large: 6,
+    huge: 6,
+  };
+
+  const NEXT_SIZE = {
+    small: "medium",
+    medium: "large",
+    large: "huge",
+    huge: "huge",
   };
 
   const BUMPERS = [
@@ -78,6 +87,10 @@
     resultTitleButton: document.getElementById("resultTitleButton"),
     soundToggle: document.getElementById("soundToggle"),
     skillButtons: Array.from(document.querySelectorAll(".skill-button")),
+    skillAnnouncement: document.getElementById("skillAnnouncement"),
+    skillAnnouncementIcon: document.getElementById("skillAnnouncementIcon"),
+    skillAnnouncementTeam: document.getElementById("skillAnnouncementTeam"),
+    skillAnnouncementText: document.getElementById("skillAnnouncementText"),
     turnStrip: document.getElementById("turnStrip"),
     turnLabel: document.getElementById("turnLabel"),
     statusLabel: document.getElementById("statusLabel"),
@@ -157,6 +170,13 @@
       red: 0,
       green: 0,
     },
+    powerBoostTeam: null,
+    skipCredits: {
+      red: 0,
+      green: 0,
+    },
+    pendingSkill: null,
+    announcementTimer: null,
     audioContext: null,
     lastCollisionSound: 0,
   };
@@ -270,6 +290,11 @@
     state.settleTime = 0;
     state.skillPoints.red = 0;
     state.skillPoints.green = 0;
+    state.powerBoostTeam = null;
+    state.skipCredits.red = 0;
+    state.skipCredits.green = 0;
+    state.pendingSkill = null;
+    hideSkillAnnouncement();
     addTeam("green", true);
     addTeam("red", false);
     updateHud();
@@ -289,11 +314,16 @@
       state.turn === "red" ? "rgba(230, 72, 91, 0.5)" : "rgba(53, 196, 122, 0.5)";
 
     if (state.phase === "ready") {
-      el.statusLabel.textContent = "コマを選択";
+      el.statusLabel.textContent =
+        state.powerBoostTeam === state.turn ? "強化中" : "コマを選択";
     } else if (state.phase === "aiming") {
       el.statusLabel.textContent = "狙いを決める";
     } else if (state.phase === "moving") {
       el.statusLabel.textContent = "移動中";
+    } else if (state.phase === "selectGrow") {
+      el.statusLabel.textContent = "育てるコマを選択";
+    } else if (state.phase === "selectSteal") {
+      el.statusLabel.textContent = "奪うコマを選択";
     }
 
     updateSkillMeters();
@@ -314,7 +344,7 @@
       button.classList.toggle("is-ready", points >= skill.cost);
       button.title =
         points >= skill.cost
-          ? `${COLORS[team].name}: ${skill.label} 準備完了（効果は未実装）`
+          ? `${COLORS[team].name}: ${skill.label} 準備完了`
           : `${COLORS[team].name}: ${skill.label} あと${skill.cost - points}`;
     });
   }
@@ -322,6 +352,116 @@
   function addSkillPoints(team, points) {
     state.skillPoints[team] = Math.max(0, state.skillPoints[team] + points);
     updateHud();
+  }
+
+  function consumeSkillPoints(team, cost) {
+    state.skillPoints[team] = Math.max(0, state.skillPoints[team] - cost);
+    updateHud();
+  }
+
+  function showSkillAnnouncement(team, icon, text) {
+    window.clearTimeout(state.announcementTimer);
+    el.skillAnnouncement.dataset.team = team;
+    el.skillAnnouncementIcon.textContent = icon;
+    el.skillAnnouncementTeam.textContent = `${COLORS[team].name}の技`;
+    el.skillAnnouncementText.textContent = text;
+    el.skillAnnouncement.classList.remove("hidden");
+    state.announcementTimer = window.setTimeout(hideSkillAnnouncement, 1200);
+  }
+
+  function hideSkillAnnouncement() {
+    window.clearTimeout(state.announcementTimer);
+    if (el.skillAnnouncement) {
+      el.skillAnnouncement.classList.add("hidden");
+    }
+  }
+
+  function getMaxDrag(piece = state.selected) {
+    return state.powerBoostTeam && piece && state.powerBoostTeam === piece.team
+      ? MAX_DRAG * 2
+      : MAX_DRAG;
+  }
+
+  function tryUseSkill(team, skillKey) {
+    const skill = SKILLS[skillKey];
+    const points = state.skillPoints[team] || 0;
+    if (state.overlay || state.phase !== "ready") {
+      el.statusLabel.textContent = "今は使えません";
+      return;
+    }
+    if (team !== state.turn) {
+      el.statusLabel.textContent = "相手の手番です";
+      return;
+    }
+    if (points < skill.cost) {
+      el.statusLabel.textContent = `あと${skill.cost - points}ポイント`;
+      return;
+    }
+
+    consumeSkillPoints(team, skill.cost);
+
+    if (skillKey === "power") {
+      state.powerBoostTeam = team;
+      showSkillAnnouncement(team, skill.label, "このターン、威力が50%アップ");
+      updateHud();
+    } else if (skillKey === "rest") {
+      state.skipCredits[team] += 1;
+      showSkillAnnouncement(team, skill.label, "相手の手番を1回スキップ");
+      updateHud();
+    } else if (skillKey === "grow") {
+      state.pendingSkill = { team, skillKey };
+      state.phase = "selectGrow";
+      showSkillAnnouncement(team, skill.label, "自分のコマを1個選んで大きくする");
+      updateHud();
+    } else if (skillKey === "steal") {
+      state.pendingSkill = { team, skillKey };
+      state.phase = "selectSteal";
+      showSkillAnnouncement(team, skill.label, "相手のコマを1個選んで奪う");
+      updateHud();
+    }
+  }
+
+  function resizePiece(piece, nextSize) {
+    const data = SIZE_DATA[nextSize];
+    piece.size = nextSize;
+    piece.r = data.r;
+    piece.mass = data.mass;
+  }
+
+  function growPiece(piece) {
+    const nextSize = NEXT_SIZE[piece.size];
+    resizePiece(piece, nextSize);
+    state.effects.push({
+      kind: "grow",
+      x: piece.x,
+      y: piece.y,
+      team: piece.team,
+      age: 0,
+      life: 0.45,
+      r: piece.r,
+    });
+    state.pendingSkill = null;
+    state.phase = "ready";
+    playTone("select", 1);
+    updateHud();
+  }
+
+  function stealPiece(piece, team) {
+    piece.team = team;
+    state.effects.push({
+      kind: "grow",
+      x: piece.x,
+      y: piece.y,
+      team,
+      age: 0,
+      life: 0.45,
+      r: piece.r,
+    });
+    state.pendingSkill = null;
+    state.phase = "ready";
+    playTone("select", 1);
+    updateHud();
+    checkVictory();
   }
 
   function setOverlay(name) {
@@ -412,10 +552,11 @@
     return !state.overlay && state.phase === "ready";
   }
 
-  function findPieceAt(point) {
+  function findPieceAt(point, teamFilter = state.turn) {
     for (let i = state.pieces.length - 1; i >= 0; i -= 1) {
       const piece = state.pieces[i];
-      if (!piece.active || piece.team !== state.turn) continue;
+      if (!piece.active) continue;
+      if (teamFilter && piece.team !== teamFilter) continue;
       const dx = point.x - piece.x;
       const dy = point.y - piece.y;
       if (Math.hypot(dx, dy) <= piece.r + 14) return piece;
@@ -427,14 +568,30 @@
     const dx = point.x - piece.x;
     const dy = point.y - piece.y;
     const dist = Math.hypot(dx, dy);
-    if (dist <= MAX_DRAG) return { x: dx, y: dy, dist };
-    const scale = MAX_DRAG / Math.max(dist, 0.001);
-    return { x: dx * scale, y: dy * scale, dist: MAX_DRAG };
+    const maxDrag = getMaxDrag(piece);
+    if (dist <= maxDrag) return { x: dx, y: dy, dist };
+    const scale = maxDrag / Math.max(dist, 0.001);
+    return { x: dx * scale, y: dy * scale, dist: maxDrag };
   }
 
   function onPointerDown(event) {
-    if (!canAim()) return;
+    if (state.overlay) return;
     const point = worldPoint(event);
+
+    if (state.phase === "selectGrow") {
+      const piece = findPieceAt(point, state.turn);
+      if (piece) growPiece(piece);
+      return;
+    }
+
+    if (state.phase === "selectSteal") {
+      const opponent = state.turn === "red" ? "green" : "red";
+      const piece = findPieceAt(point, opponent);
+      if (piece) stealPiece(piece, state.turn);
+      return;
+    }
+
+    if (!canAim()) return;
     const piece = findPieceAt(point);
     if (!piece) return;
     canvas.setPointerCapture(event.pointerId);
@@ -464,14 +621,15 @@
 
     const piece = state.selected;
     const massSpeedOffset = 0.84 + piece.mass * 0.07;
-    const launchScale = (8.35 * LAUNCH_POWER) / massSpeedOffset;
+    const boost = state.powerBoostTeam === piece.team ? 1.5 : 1;
+    const launchScale = (8.35 * LAUNCH_POWER * boost) / massSpeedOffset;
     piece.vx = -drag.x * launchScale;
     piece.vy = -drag.y * launchScale;
     state.selected = null;
     state.pointer = null;
     state.phase = "moving";
     state.settleTime = 0;
-    playTone("launch", Math.min(1.25, 0.55 + drag.dist / MAX_DRAG));
+    playTone("launch", Math.min(1.25, 0.55 + drag.dist / getMaxDrag(piece)));
     updateHud();
   }
 
@@ -611,9 +769,7 @@
       .every((piece) => Math.hypot(piece.vx, piece.vy) < STOP_SPEED);
   }
 
-  function finishTurn() {
-    const actingTeam = state.turn;
-    addSkillPoints(actingTeam, 1);
+  function checkVictory() {
     const red = livePieces("red").length;
     const green = livePieces("green").length;
 
@@ -624,10 +780,27 @@
       state.phase = "result";
       playTone("win", 0.85);
       setOverlay("result");
-      return;
+      return true;
     }
 
-    state.turn = state.turn === "red" ? "green" : "red";
+    return false;
+  }
+
+  function finishTurn() {
+    const actingTeam = state.turn;
+    addSkillPoints(actingTeam, 1);
+    if (checkVictory()) return;
+
+    if (state.powerBoostTeam === actingTeam) {
+      state.powerBoostTeam = null;
+    }
+
+    if (state.skipCredits[actingTeam] > 0) {
+      state.skipCredits[actingTeam] -= 1;
+      state.turn = actingTeam;
+    } else {
+      state.turn = state.turn === "red" ? "green" : "red";
+    }
     state.phase = "ready";
     state.settleTime = 0;
     updateHud();
@@ -862,7 +1035,8 @@
     if (state.phase !== "aiming" || !state.selected || !state.pointer) return;
     const piece = state.selected;
     const drag = clampDrag(piece, state.pointer);
-    const power = drag.dist / MAX_DRAG;
+    const maxDrag = getMaxDrag(piece);
+    const power = drag.dist / maxDrag;
     const ax = -drag.x;
     const ay = -drag.y;
     const len = Math.hypot(ax, ay) || 1;
@@ -906,6 +1080,13 @@
       ctx.lineWidth = 3;
       ctx.stroke();
     }
+    if (state.powerBoostTeam === piece.team) {
+      ctx.beginPath();
+      ctx.arc(piece.x, piece.y, maxDrag, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255, 224, 109, 0.28)";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -925,6 +1106,14 @@
         ctx.beginPath();
         ctx.arc(effect.x, effect.y + t * 28, effect.r * (1 - t), 0, Math.PI * 2);
         ctx.fill();
+      } else if (effect.kind === "grow") {
+        const color = COLORS[effect.team];
+        ctx.globalAlpha = 1 - t;
+        ctx.strokeStyle = color.main;
+        ctx.lineWidth = 7 * (1 - t);
+        ctx.beginPath();
+        ctx.arc(effect.x, effect.y, effect.r * (0.82 + t * 0.8), 0, Math.PI * 2);
+        ctx.stroke();
       } else {
         ctx.globalAlpha = 1 - t;
         ctx.strokeStyle = "#ffe48b";
@@ -1007,11 +1196,7 @@
     });
     el.skillButtons.forEach((button) => {
       button.addEventListener("click", () => {
-        const team = button.dataset.team;
-        const skill = SKILLS[button.dataset.skill];
-        const points = state.skillPoints[team] || 0;
-        el.statusLabel.textContent =
-          points >= skill.cost ? "技は準備完了" : `あと${skill.cost - points}ポイント`;
+        tryUseSkill(button.dataset.team, button.dataset.skill);
       });
     });
 
