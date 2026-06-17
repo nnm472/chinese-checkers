@@ -39,8 +39,21 @@
 
   const SIZE_DATA = {
     small: { r: 19, mass: 1.0 },
-    medium: { r: 25, mass: 1.75 },
-    large: { r: 37, mass: 3.25 },
+    medium: { r: 27.5, mass: 1.95 },
+    large: { r: 44.5, mass: 4.15 },
+  };
+
+  const SKILLS = {
+    power: { label: "強", cost: 10 },
+    rest: { label: "休", cost: 15 },
+    grow: { label: "育", cost: 20 },
+    steal: { label: "奪", cost: 25 },
+  };
+
+  const DROP_SKILL_POINTS = {
+    small: 1,
+    medium: 3,
+    large: 5,
   };
 
   const BUMPERS = [
@@ -64,6 +77,7 @@
     rematchButton: document.getElementById("rematchButton"),
     resultTitleButton: document.getElementById("resultTitleButton"),
     soundToggle: document.getElementById("soundToggle"),
+    skillButtons: Array.from(document.querySelectorAll(".skill-button")),
     turnStrip: document.getElementById("turnStrip"),
     turnLabel: document.getElementById("turnLabel"),
     statusLabel: document.getElementById("statusLabel"),
@@ -139,6 +153,10 @@
     tutorialIndex: 0,
     overlay: "title",
     sound: true,
+    skillPoints: {
+      red: 0,
+      green: 0,
+    },
     audioContext: null,
     lastCollisionSound: 0,
   };
@@ -250,6 +268,8 @@
     state.selected = null;
     state.pointer = null;
     state.settleTime = 0;
+    state.skillPoints.red = 0;
+    state.skillPoints.green = 0;
     addTeam("green", true);
     addTeam("red", false);
     updateHud();
@@ -275,6 +295,33 @@
     } else if (state.phase === "moving") {
       el.statusLabel.textContent = "移動中";
     }
+
+    updateSkillMeters();
+  }
+
+  function updateSkillMeters() {
+    el.skillButtons.forEach((button) => {
+      const team = button.dataset.team;
+      const skill = SKILLS[button.dataset.skill];
+      const points = state.skillPoints[team] || 0;
+      const shownPoints = Math.min(points, skill.cost);
+      const ratio = Math.min(points / skill.cost, 1);
+      const fill = button.querySelector(".skill-fill");
+      const meter = button.querySelector(".skill-meter");
+
+      fill.style.setProperty("--fill", `${Math.round(ratio * 100)}%`);
+      meter.textContent = `${shownPoints}/${skill.cost}`;
+      button.classList.toggle("is-ready", points >= skill.cost);
+      button.title =
+        points >= skill.cost
+          ? `${COLORS[team].name}: ${skill.label} 準備完了（効果は未実装）`
+          : `${COLORS[team].name}: ${skill.label} あと${skill.cost - points}`;
+    });
+  }
+
+  function addSkillPoints(team, points) {
+    state.skillPoints[team] = Math.max(0, state.skillPoints[team] + points);
+    updateHud();
   }
 
   function setOverlay(name) {
@@ -533,6 +580,7 @@
     piece.active = false;
     piece.vx = 0;
     piece.vy = 0;
+    addSkillPoints(piece.team, DROP_SKILL_POINTS[piece.size]);
     state.effects.push({
       kind: "drop",
       x: piece.x,
@@ -564,6 +612,8 @@
   }
 
   function finishTurn() {
+    const actingTeam = state.turn;
+    addSkillPoints(actingTeam, 1);
     const red = livePieces("red").length;
     const green = livePieces("green").length;
 
@@ -954,6 +1004,15 @@
     el.resultTitleButton.addEventListener("click", showTitle);
     el.soundToggle.addEventListener("change", () => {
       state.sound = el.soundToggle.checked;
+    });
+    el.skillButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const team = button.dataset.team;
+        const skill = SKILLS[button.dataset.skill];
+        const points = state.skillPoints[team] || 0;
+        el.statusLabel.textContent =
+          points >= skill.cost ? "技は準備完了" : `あと${skill.cost - points}ポイント`;
+      });
     });
 
     el.tutorialBackButton.addEventListener("click", () => {
