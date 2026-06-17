@@ -3,10 +3,12 @@
   const ctx = canvas.getContext("2d");
 
   const VIEW_W = 1000;
-  const VIEW_H = 1500;
-  const BOARD = { x: 84, y: 126, w: 832, h: 1248 };
+  const VIEW_H = 1292;
+  const BOARD = { x: 84, y: 126, w: 832, h: 1040 };
+  const GRID_COLS = 8;
+  const GRID_ROWS = 10;
   const MAX_DRAG = 178;
-  const LAUNCH_POWER = 0.7;
+  const LAUNCH_POWER = 0.77;
   const STOP_SPEED = 18;
   const LINEAR_DAMPING = 1.35;
   const RESTITUTION = 0.88;
@@ -35,8 +37,8 @@
   };
 
   const BUMPERS = [
-    { x: 170, y: 734, w: 190, h: 26 },
-    { x: 640, y: 734, w: 190, h: 26 },
+    { x: 170, y: BOARD.y + BOARD.h / 2 - 13, w: 190, h: 26 },
+    { x: 640, y: BOARD.y + BOARD.h / 2 - 13, w: 190, h: 26 },
   ];
 
   const el = {
@@ -212,10 +214,8 @@
 
   function addTeam(team, topSide) {
     const mirror = (y) => (topSide ? y : VIEW_H - y);
-    const cols = 8;
-    const rows = 12;
-    const gridX = (column) => BOARD.x + (BOARD.w / cols) * column;
-    const gridY = (row) => BOARD.y + (BOARD.h / rows) * row;
+    const gridX = (column) => BOARD.x + (BOARD.w / GRID_COLS) * column;
+    const gridY = (row) => BOARD.y + (BOARD.h / GRID_ROWS) * row;
     const mediumColumns = [0, 1, 2, 3, 5, 6, 7, 8];
     const smallWideColumns = [0, 2, 4, 6, 8];
     const smallSideColumns = [1, 7];
@@ -657,12 +657,10 @@
     ctx.lineCap = "round";
     ctx.strokeStyle = "rgba(54, 32, 15, 0.72)";
     ctx.lineWidth = 4;
-    const cols = 8;
-    const rows = 12;
-    const cellW = BOARD.w / cols;
-    const cellH = BOARD.h / rows;
+    const cellW = BOARD.w / GRID_COLS;
+    const cellH = BOARD.h / GRID_ROWS;
 
-    for (let c = 1; c < cols; c += 1) {
+    for (let c = 1; c < GRID_COLS; c += 1) {
       const x = BOARD.x + c * cellW;
       ctx.beginPath();
       ctx.moveTo(x, BOARD.y + 6);
@@ -670,7 +668,7 @@
       ctx.stroke();
     }
 
-    for (let r = 1; r < rows; r += 1) {
+    for (let r = 1; r < GRID_ROWS; r += 1) {
       const y = BOARD.y + r * cellH;
       ctx.beginPath();
       ctx.moveTo(BOARD.x + 6, y);

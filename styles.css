@@ -208,10 +208,10 @@ button {
 }
 
 #gameCanvas {
-  width: min(100%, calc((100dvh - 244px) * 0.6667));
-  max-width: 510px;
+  width: min(100%, calc((100dvh - 244px) * 0.774));
+  max-width: 540px;
   max-height: calc(100dvh - 244px);
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 1000 / 1292;
   display: block;
   border-radius: 8px;
   box-shadow: var(--shadow);
@@ -428,7 +428,7 @@ button {
   }
 
   #gameCanvas {
-    width: min(68vh, 520px);
+    width: min(76vh, 540px);
     max-height: 780px;
   }
 }
@@ -458,6 +458,6 @@ button {
 
   #gameCanvas {
     max-height: calc(100dvh - 214px);
-    width: min(100%, calc((100dvh - 214px) * 0.6667));
+    width: min(100%, calc((100dvh - 214px) * 0.774));
   }
 }
