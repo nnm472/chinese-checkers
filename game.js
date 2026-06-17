@@ -6,10 +6,12 @@
   const VIEW_H = 1500;
   const BOARD = { x: 84, y: 126, w: 832, h: 1248 };
   const MAX_DRAG = 178;
-  const STOP_SPEED = 9;
-  const LINEAR_DAMPING = 1.08;
+  const LAUNCH_POWER = 0.7;
+  const STOP_SPEED = 18;
+  const LINEAR_DAMPING = 1.35;
   const RESTITUTION = 0.88;
   const BUMPER_RESTITUTION = 0.94;
+  const SETTLE_DELAY = 0.25;
 
   const COLORS = {
     red: {
@@ -210,22 +212,26 @@
 
   function addTeam(team, topSide) {
     const mirror = (y) => (topSide ? y : VIEW_H - y);
-    const mediumXs = [178, 270, 362, 454, 546, 638, 730, 822];
-    const smallFrontXs = [116, 308, 500, 692, 884];
-    const smallMidXs = [218, 782];
+    const cols = 8;
+    const rows = 12;
+    const gridX = (column) => BOARD.x + (BOARD.w / cols) * column;
+    const gridY = (row) => BOARD.y + (BOARD.h / rows) * row;
+    const mediumColumns = [0, 1, 2, 3, 5, 6, 7, 8];
+    const smallWideColumns = [0, 2, 4, 6, 8];
+    const smallSideColumns = [1, 7];
 
-    mediumXs.forEach((x, index) => {
-      state.pieces.push(createPiece(team, "medium", x, mirror(210), index % 5));
+    mediumColumns.forEach((column, index) => {
+      state.pieces.push(createPiece(team, "medium", gridX(column), mirror(gridY(0)), index % 5));
     });
 
-    state.pieces.push(createPiece(team, "large", 500, mirror(330), 5));
+    state.pieces.push(createPiece(team, "large", gridX(4), mirror(gridY(1)), 5));
 
-    smallFrontXs.forEach((x, index) => {
-      state.pieces.push(createPiece(team, "small", x, mirror(478), index % 5));
+    smallSideColumns.forEach((column, index) => {
+      state.pieces.push(createPiece(team, "small", gridX(column), mirror(gridY(2)), index % 5));
     });
 
-    smallMidXs.forEach((x, index) => {
-      state.pieces.push(createPiece(team, "small", x, mirror(584), (index + 2) % 5));
+    smallWideColumns.forEach((column, index) => {
+      state.pieces.push(createPiece(team, "small", gridX(column), mirror(gridY(3)), (index + 2) % 5));
     });
   }
 
@@ -404,7 +410,7 @@
 
     const piece = state.selected;
     const massSpeedOffset = 0.84 + piece.mass * 0.07;
-    const launchScale = 8.35 / massSpeedOffset;
+    const launchScale = (8.35 * LAUNCH_POWER) / massSpeedOffset;
     piece.vx = -drag.x * launchScale;
     piece.vy = -drag.y * launchScale;
     state.selected = null;
@@ -603,7 +609,7 @@
     if (state.phase === "moving") {
       if (allStopped()) {
         state.settleTime += dt;
-        if (state.settleTime > 0.42) finishTurn();
+        if (state.settleTime > SETTLE_DELAY) finishTurn();
       } else {
         state.settleTime = 0;
       }
