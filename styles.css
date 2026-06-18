@@ -546,7 +546,8 @@ button {
 .mini-arrow,
 .mini-pull,
 .mini-bumper,
-.mini-drop {
+.mini-drop,
+.mini-skill {
   position: absolute;
 }
 
@@ -585,6 +586,29 @@ button {
   height: 52px;
   border: 3px dashed rgba(255, 255, 255, 0.8);
   border-radius: 50%;
+}
+
+.tutorial-board--skills {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 224, 109, 0.22), transparent 62px),
+    linear-gradient(rgba(38, 22, 14, 0.24) 2px, transparent 2px),
+    linear-gradient(90deg, rgba(38, 22, 14, 0.24) 2px, transparent 2px);
+  background-size: auto, 42px 42px, 42px 42px;
+}
+
+.mini-skill {
+  min-width: 72px;
+  min-height: 34px;
+  padding: 0 10px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #fff7e8;
+  background: rgba(30, 27, 21, 0.72);
+  border: 1px solid rgba(255, 247, 232, 0.24);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  font-size: 0.92rem;
+  font-weight: 900;
 }
 
 @media (min-width: 760px) {

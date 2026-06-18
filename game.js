@@ -22,6 +22,8 @@
   const RESTITUTION = 0.88;
   const BUMPER_RESTITUTION = 0.94;
   const SETTLE_DELAY = 0.25;
+  const STRIKER_SIDE_DAMPING = 0.5;
+  const STRIKER_RECOIL_DAMPING = 0.5;
 
   const COLORS = {
     red: {
@@ -46,10 +48,10 @@
   };
 
   const SKILLS = {
-    power: { label: "強", cost: 10 },
-    rest: { label: "休", cost: 15 },
-    grow: { label: "育", cost: 20 },
-    steal: { label: "奪", cost: 25 },
+    power: { label: "強", cost: 8 },
+    rest: { label: "休", cost: 13 },
+    grow: { label: "育", cost: 17 },
+    steal: { label: "奪", cost: 23 },
   };
 
   const DROP_SKILL_POINTS = {
@@ -156,6 +158,20 @@
         </div>
       `,
     },
+    {
+      title: "特殊能力",
+      text: "ゲームが進むと特殊能力を使えます。強・休・育・奪で手番を有利に進めましょう。",
+      art: `
+        <div class="tutorial-board tutorial-board--skills">
+          <span class="mini-skill" style="left: 24px; top: 34px;">強 8</span>
+          <span class="mini-skill" style="right: 24px; top: 34px;">休 13</span>
+          <span class="mini-skill" style="left: 24px; bottom: 34px;">育 17</span>
+          <span class="mini-skill" style="right: 24px; bottom: 34px;">奪 23</span>
+          <span class="mini-piece red" style="left: 132px; top: 56px;"></span>
+          <span class="mini-piece green" style="right: 132px; bottom: 56px;"></span>
+        </div>
+      `,
+    },
   ];
 
   const state = {
@@ -168,6 +184,7 @@
     settleTime: 0,
     lastTime: performance.now(),
     tutorialIndex: 0,
+    tutorialReturnOverlay: "title",
     overlay: "title",
     mode: "twoPlayer",
     cpuTeam: "green",
@@ -555,18 +572,30 @@
   }
 
   function openTutorial() {
+    state.tutorialReturnOverlay = state.overlay;
     state.tutorialIndex = 0;
     renderTutorial();
     setOverlay("tutorial");
   }
 
-  function closeTutorialToTitle() {
+  function closeTutorial() {
     try {
       localStorage.setItem("chinese-checkers-tutorial-seen", "1");
     } catch {
       // localStorage can be unavailable in private contexts.
     }
-    showTitle();
+    const returnOverlay = state.tutorialReturnOverlay;
+    state.tutorialReturnOverlay = "title";
+    if (returnOverlay === null) {
+      setOverlay(null);
+      updateHud();
+      return;
+    }
+    if (returnOverlay === "title") {
+      showTitle();
+      return;
+    }
+    setOverlay(returnOverlay);
   }
 
   function renderTutorial() {
@@ -576,8 +605,9 @@
     el.tutorialText.textContent = slide.text;
     el.tutorialArt.innerHTML = slide.art;
     el.tutorialBackButton.textContent = state.tutorialIndex === 0 ? "閉じる" : "戻る";
+    const exitText = state.tutorialReturnOverlay === null ? "ゲームへ" : "タイトルへ";
     el.tutorialNextButton.textContent =
-      state.tutorialIndex === tutorialSlides.length - 1 ? "タイトルへ" : "次へ";
+      state.tutorialIndex === tutorialSlides.length - 1 ? exitText : "次へ";
   }
 
   function playTone(type, intensity = 1) {
@@ -843,6 +873,23 @@
     }
   }
 
+  function softenStrikerBounce(piece, beforeVx, beforeVy) {
+    const speed = Math.hypot(beforeVx, beforeVy);
+    if (speed < STOP_SPEED) return;
+
+    const ux = beforeVx / speed;
+    const uy = beforeVy / speed;
+    const px = -uy;
+    const py = ux;
+    const along = piece.vx * ux + piece.vy * uy;
+    const side = piece.vx * px + piece.vy * py;
+    const softenedAlong = along < 0 ? along * STRIKER_RECOIL_DAMPING : along;
+    const softenedSide = side * STRIKER_SIDE_DAMPING;
+
+    piece.vx = ux * softenedAlong + px * softenedSide;
+    piece.vy = uy * softenedAlong + py * softenedSide;
+  }
+
   function collidePieces(a, b) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
@@ -868,6 +915,8 @@
     const velAlongNormal = rvx * nx + rvy * ny;
     if (velAlongNormal > 0) return;
 
+    const beforeA = { vx: a.vx, vy: a.vy };
+    const beforeB = { vx: b.vx, vy: b.vy };
     const impulse = (-(1 + RESTITUTION) * velAlongNormal) / invSum;
     const ix = impulse * nx;
     const iy = impulse * ny;
@@ -875,6 +924,8 @@
     a.vy -= iy * invA;
     b.vx += ix * invB;
     b.vy += iy * invB;
+    softenStrikerBounce(a, beforeA.vx, beforeA.vy);
+    softenStrikerBounce(b, beforeB.vx, beforeB.vy);
 
     const impact = Math.abs(impulse);
     const now = performance.now();
@@ -1403,7 +1454,7 @@
 
     el.tutorialBackButton.addEventListener("click", () => {
       if (state.tutorialIndex === 0) {
-        closeTutorialToTitle();
+        closeTutorial();
         return;
       }
       state.tutorialIndex -= 1;
@@ -1412,7 +1463,7 @@
 
     el.tutorialNextButton.addEventListener("click", () => {
       if (state.tutorialIndex === tutorialSlides.length - 1) {
-        closeTutorialToTitle();
+        closeTutorial();
         return;
       }
       state.tutorialIndex += 1;
