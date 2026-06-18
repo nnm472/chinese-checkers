@@ -22,8 +22,9 @@
   const RESTITUTION = 0.88;
   const BUMPER_RESTITUTION = 0.94;
   const SETTLE_DELAY = 0.25;
-  const STRIKER_SIDE_DAMPING = 0.5;
-  const STRIKER_RECOIL_DAMPING = 0.5;
+  const STRIKER_ALONG_DAMPING = 0.5;
+  const POWER_DRAG_MULTIPLIER = 1.5;
+  const POWER_LAUNCH_MULTIPLIER = 1.25;
 
   const COLORS = {
     red: {
@@ -48,10 +49,10 @@
   };
 
   const SKILLS = {
-    power: { label: "強", cost: 8 },
-    rest: { label: "休", cost: 13 },
-    grow: { label: "育", cost: 17 },
-    steal: { label: "奪", cost: 23 },
+    power: { label: "Power", cost: 8 },
+    rest: { label: "Skip", cost: 13 },
+    grow: { label: "Grow", cost: 17 },
+    steal: { label: "Steal", cost: 23 },
   };
 
   const DROP_SKILL_POINTS = {
@@ -147,6 +148,18 @@
       `,
     },
     {
+      title: "特殊能力",
+      text: "ゲームが進むと特殊能力を使えます。Power・Skip・Grow・Stealで手番を有利に進めましょう。",
+      art: `
+        <div class="tutorial-board tutorial-board--skills">
+          <span class="mini-skill" style="left: 22px; top: 22px;">Power</span>
+          <span class="mini-skill" style="right: 22px; top: 22px;">Skip</span>
+          <span class="mini-skill" style="left: 22px; bottom: 22px;">Grow</span>
+          <span class="mini-skill" style="right: 22px; bottom: 22px;">Steal</span>
+        </div>
+      `,
+    },
+    {
       title: "勝利条件",
       text: "相手チームのコマをすべて盤外に落としたら勝利です。",
       art: `
@@ -155,20 +168,6 @@
           <span class="mini-piece red" style="left: 146px; bottom: 34px;"></span>
           <span class="mini-piece green" style="right: 42px; top: 38px;"></span>
           <span class="mini-drop" style="right: 32px; top: 28px;"></span>
-        </div>
-      `,
-    },
-    {
-      title: "特殊能力",
-      text: "ゲームが進むと特殊能力を使えます。強・休・育・奪で手番を有利に進めましょう。",
-      art: `
-        <div class="tutorial-board tutorial-board--skills">
-          <span class="mini-skill" style="left: 24px; top: 34px;">強 8</span>
-          <span class="mini-skill" style="right: 24px; top: 34px;">休 13</span>
-          <span class="mini-skill" style="left: 24px; bottom: 34px;">育 17</span>
-          <span class="mini-skill" style="right: 24px; bottom: 34px;">奪 23</span>
-          <span class="mini-piece red" style="left: 132px; top: 56px;"></span>
-          <span class="mini-piece green" style="right: 132px; bottom: 56px;"></span>
         </div>
       `,
     },
@@ -371,7 +370,7 @@
   function currentStatusText() {
     if (isCpuTurn() || state.cpuThinking) return "CPU思考中";
     if (state.phase === "ready") {
-      return state.powerBoostTeam === state.turn ? "強化中" : "コマを選択";
+      return state.powerBoostTeam === state.turn ? "Power強化中" : "コマを選択";
     }
     if (state.phase === "aiming") return "狙いを決める";
     if (state.phase === "moving") return "移動中";
@@ -393,8 +392,9 @@
     const green = livePieces("green").length;
     el.redCount.textContent = String(red);
     el.greenCount.textContent = String(green);
-    el.redTurnLabel.textContent = state.turn === "red" ? "赤の手番" : "赤は待機";
-    el.greenTurnLabel.textContent = state.turn === "green" ? "緑の手番" : "緑は待機";
+    const turnLabel = `${COLORS[state.turn].name}の手番`;
+    el.redTurnLabel.textContent = turnLabel;
+    el.greenTurnLabel.textContent = turnLabel;
     el.redPanel.classList.toggle("is-active", state.turn === "red");
     el.greenPanel.classList.toggle("is-active", state.turn === "green");
 
@@ -412,18 +412,15 @@
       const skill = SKILLS[button.dataset.skill];
       if (!team || !skill) return;
       const points = state.skillPoints[team] || 0;
-      const shownPoints = Math.min(points, skill.cost);
       const ratio = Math.min(points / skill.cost, 1);
       const fill = button.querySelector(".skill-fill");
-      const meter = button.querySelector(".skill-meter");
+      const isReady = points >= skill.cost;
 
       if (fill) fill.style.setProperty("--fill", `${Math.round(ratio * 100)}%`);
-      if (meter) meter.textContent = `${shownPoints}/${skill.cost}`;
-      button.classList.toggle("is-ready", points >= skill.cost);
-      button.title =
-        points >= skill.cost
-          ? `${COLORS[team].name}: ${skill.label} 準備完了`
-          : `${COLORS[team].name}: ${skill.label} あと${skill.cost - points}`;
+      button.classList.toggle("is-ready", isReady);
+      const readyText = isReady ? "使用可能" : "準備中";
+      button.title = `${COLORS[team].name}: ${skill.label} ${readyText}`;
+      button.setAttribute("aria-label", `${COLORS[team].name} ${skill.label} ${readyText}`);
     });
   }
 
@@ -457,7 +454,7 @@
 
   function getMaxDrag(piece = state.selected) {
     return state.powerBoostTeam && piece && state.powerBoostTeam === piece.team
-      ? MAX_DRAG * 2
+      ? MAX_DRAG * POWER_DRAG_MULTIPLIER
       : MAX_DRAG;
   }
 
@@ -477,7 +474,7 @@
       return;
     }
     if (points < skill.cost) {
-      setStatusText(`あと${skill.cost - points}ポイント`);
+      setStatusText(`${skill.label}は準備中`);
       return;
     }
 
@@ -487,24 +484,24 @@
       state.powerBoostTeam = team;
       showSkillAnnouncement(team, skill.label, "この手番だけ威力アップ");
       updateHud();
-      setStatusText("強 発動: 威力50%アップ");
+      setStatusText("Power発動: 威力アップ");
     } else if (skillKey === "rest") {
       state.skipCredits[team] += 1;
-      showSkillAnnouncement(team, skill.label, "相手の手番を1回スキップ");
+      showSkillAnnouncement(team, skill.label, "相手の手番をスキップ");
       updateHud();
-      setStatusText("休 発動: 次も自分の番");
+      setStatusText("Skip発動: 次も自分の番");
     } else if (skillKey === "grow") {
       state.pendingSkill = { team, skillKey };
       state.phase = "selectGrow";
       showSkillAnnouncement(team, skill.label, "自分のコマを1個選んで大きくする", 2200);
       updateHud();
-      setStatusText("育 発動: 自分のコマを選択");
+      setStatusText("Grow発動: 自分のコマを選択");
     } else if (skillKey === "steal") {
       state.pendingSkill = { team, skillKey };
       state.phase = "selectSteal";
       showSkillAnnouncement(team, skill.label, "相手のコマを1個選んで自分の色にする", 2200);
       updateHud();
-      setStatusText("奪 発動: 相手のコマを選択");
+      setStatusText("Steal発動: 相手のコマを選択");
     }
   }
 
@@ -851,7 +848,7 @@
 
     const piece = state.selected;
     const massSpeedOffset = 0.84 + piece.mass * 0.07;
-    const boost = state.powerBoostTeam === piece.team ? 1.5 : 1;
+    const boost = state.powerBoostTeam === piece.team ? POWER_LAUNCH_MULTIPLIER : 1;
     const launchScale = (8.35 * LAUNCH_POWER * boost) / massSpeedOffset;
     piece.vx = -drag.x * launchScale;
     piece.vy = -drag.y * launchScale;
@@ -883,8 +880,8 @@
     const py = ux;
     const along = piece.vx * ux + piece.vy * uy;
     const side = piece.vx * px + piece.vy * py;
-    const softenedAlong = along < 0 ? along * STRIKER_RECOIL_DAMPING : along;
-    const softenedSide = side * STRIKER_SIDE_DAMPING;
+    const softenedAlong = along * STRIKER_ALONG_DAMPING;
+    const softenedSide = side;
 
     piece.vx = ux * softenedAlong + px * softenedSide;
     piece.vy = uy * softenedAlong + py * softenedSide;

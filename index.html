@@ -32,31 +32,27 @@
             <span id="greenStatusLabel">待機中</span>
           </div>
           <div class="player-meta">
-            <span id="greenCount">16</span>
             <span>残り</span>
+            <span class="piece-count" id="greenCount">16</span>
           </div>
         </section>
 
         <section class="skill-row skill-row--top facing-green" aria-label="緑チームのスキル">
           <button class="skill-button" type="button" data-team="green" data-skill="power">
             <span class="skill-fill"></span>
-            <span class="skill-label">強</span>
-            <span class="skill-meter">0/8</span>
+            <span class="skill-label">Power</span>
           </button>
           <button class="skill-button" type="button" data-team="green" data-skill="rest">
             <span class="skill-fill"></span>
-            <span class="skill-label">休</span>
-            <span class="skill-meter">0/13</span>
+            <span class="skill-label">Skip</span>
           </button>
           <button class="skill-button" type="button" data-team="green" data-skill="grow">
             <span class="skill-fill"></span>
-            <span class="skill-label">育</span>
-            <span class="skill-meter">0/17</span>
+            <span class="skill-label">Grow</span>
           </button>
           <button class="skill-button" type="button" data-team="green" data-skill="steal">
             <span class="skill-fill"></span>
-            <span class="skill-label">奪</span>
-            <span class="skill-meter">0/23</span>
+            <span class="skill-label">Steal</span>
           </button>
         </section>
 
@@ -67,23 +63,19 @@
         <section class="skill-row skill-row--bottom" aria-label="赤チームのスキル">
           <button class="skill-button" type="button" data-team="red" data-skill="power">
             <span class="skill-fill"></span>
-            <span class="skill-label">強</span>
-            <span class="skill-meter">0/8</span>
+            <span class="skill-label">Power</span>
           </button>
           <button class="skill-button" type="button" data-team="red" data-skill="rest">
             <span class="skill-fill"></span>
-            <span class="skill-label">休</span>
-            <span class="skill-meter">0/13</span>
+            <span class="skill-label">Skip</span>
           </button>
           <button class="skill-button" type="button" data-team="red" data-skill="grow">
             <span class="skill-fill"></span>
-            <span class="skill-label">育</span>
-            <span class="skill-meter">0/17</span>
+            <span class="skill-label">Grow</span>
           </button>
           <button class="skill-button" type="button" data-team="red" data-skill="steal">
             <span class="skill-fill"></span>
-            <span class="skill-label">奪</span>
-            <span class="skill-meter">0/23</span>
+            <span class="skill-label">Steal</span>
           </button>
         </section>
 
@@ -97,8 +89,8 @@
             <span id="redStatusLabel">コマを選択</span>
           </div>
           <div class="player-meta">
-            <span id="redCount">16</span>
             <span>残り</span>
+            <span class="piece-count" id="redCount">16</span>
           </div>
         </section>
       </main>
@@ -161,7 +153,7 @@
     </section>
 
     <div class="skill-announcement hidden" id="skillAnnouncement" aria-live="polite">
-      <div class="skill-announcement__icon" id="skillAnnouncementIcon">強</div>
+      <div class="skill-announcement__icon" id="skillAnnouncementIcon">Power</div>
       <div>
         <p class="skill-announcement__team" id="skillAnnouncementTeam">赤</p>
         <p class="skill-announcement__text" id="skillAnnouncementText">このターン、威力が50%アップ</p>
