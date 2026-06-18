@@ -1661,51 +1661,180 @@
     ctx.strokeStyle = "rgba(255, 255, 255, 0.58)";
     ctx.stroke();
 
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.arc(-piece.r * 0.28, -piece.r * 0.38, piece.r * 0.22, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255, 255, 255, 0.58)";
-    ctx.fill();
+    ctx.moveTo(-piece.r * 0.52, -piece.r * 0.43);
+    ctx.quadraticCurveTo(-piece.r * 0.24, -piece.r * 0.58, piece.r * 0.1, -piece.r * 0.46);
+    ctx.lineWidth = Math.max(1.8, piece.r * 0.065);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.54)";
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(-piece.r * 0.44, -piece.r * 0.27);
+    ctx.quadraticCurveTo(-piece.r * 0.22, -piece.r * 0.35, -piece.r * 0.02, -piece.r * 0.31);
+    ctx.lineWidth = Math.max(1.2, piece.r * 0.04);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.26)";
+    ctx.stroke();
 
     drawSymbol(piece);
     ctx.restore();
+  }
+
+  function drawFrostSprig(scale) {
+    const s = scale;
+    ctx.beginPath();
+    ctx.moveTo(-0.72 * s, 0.52 * s);
+    ctx.lineTo(0.58 * s, -0.58 * s);
+    ctx.moveTo(-0.45 * s, 0.29 * s);
+    ctx.lineTo(-0.79 * s, 0.12 * s);
+    ctx.moveTo(-0.45 * s, 0.29 * s);
+    ctx.lineTo(-0.47 * s, 0.66 * s);
+    ctx.moveTo(-0.08 * s, -0.02 * s);
+    ctx.lineTo(-0.44 * s, -0.27 * s);
+    ctx.moveTo(-0.08 * s, -0.02 * s);
+    ctx.lineTo(0.08 * s, 0.36 * s);
+    ctx.moveTo(0.28 * s, -0.33 * s);
+    ctx.lineTo(0.08 * s, -0.68 * s);
+    ctx.moveTo(0.28 * s, -0.33 * s);
+    ctx.lineTo(0.66 * s, -0.22 * s);
+    ctx.stroke();
+  }
+
+  function drawLeafSigil(scale) {
+    const s = scale;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
+    ctx.beginPath();
+    ctx.moveTo(-0.62 * s, 0.46 * s);
+    ctx.bezierCurveTo(-0.48 * s, -0.2 * s, 0.29 * s, -0.72 * s, 0.73 * s, -0.36 * s);
+    ctx.bezierCurveTo(0.53 * s, 0.2 * s, -0.06 * s, 0.58 * s, -0.62 * s, 0.46 * s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(-0.56 * s, 0.42 * s);
+    ctx.bezierCurveTo(-0.18 * s, 0.08 * s, 0.24 * s, -0.22 * s, 0.62 * s, -0.34 * s);
+    ctx.moveTo(-0.09 * s, 0.02 * s);
+    ctx.lineTo(-0.02 * s, 0.32 * s);
+    ctx.moveTo(0.16 * s, -0.14 * s);
+    ctx.lineTo(0.37 * s, 0.08 * s);
+    ctx.stroke();
+  }
+
+  function drawFlameShard(scale) {
+    const s = scale;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+    ctx.beginPath();
+    ctx.moveTo(-0.58 * s, 0.44 * s);
+    ctx.bezierCurveTo(-0.34 * s, 0.1 * s, -0.18 * s, -0.35 * s, 0.49 * s, -0.62 * s);
+    ctx.bezierCurveTo(0.32 * s, -0.22 * s, 0.78 * s, 0.02 * s, 0.38 * s, 0.48 * s);
+    ctx.bezierCurveTo(0.04 * s, 0.74 * s, -0.38 * s, 0.66 * s, -0.58 * s, 0.44 * s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(-0.13 * s, 0.34 * s);
+    ctx.bezierCurveTo(0.05 * s, 0.02 * s, 0.18 * s, -0.18 * s, 0.45 * s, -0.38 * s);
+    ctx.stroke();
+  }
+
+  function drawMountainPine(scale) {
+    const s = scale;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.16)";
+    ctx.beginPath();
+    ctx.moveTo(-0.72 * s, 0.46 * s);
+    ctx.lineTo(-0.36 * s, -0.08 * s);
+    ctx.lineTo(-0.16 * s, 0.1 * s);
+    ctx.lineTo(0.06 * s, -0.5 * s);
+    ctx.lineTo(0.72 * s, 0.46 * s);
+    ctx.lineTo(0.22 * s, 0.34 * s);
+    ctx.lineTo(0.02 * s, 0.62 * s);
+    ctx.lineTo(-0.18 * s, 0.36 * s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(-0.45 * s, 0.5 * s);
+    ctx.lineTo(-0.34 * s, 0.12 * s);
+    ctx.moveTo(-0.55 * s, 0.24 * s);
+    ctx.lineTo(-0.18 * s, 0.24 * s);
+    ctx.moveTo(-0.48 * s, 0.04 * s);
+    ctx.lineTo(-0.24 * s, 0.04 * s);
+    ctx.stroke();
+  }
+
+  function drawCometMark(scale) {
+    const s = scale;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
+    ctx.beginPath();
+    ctx.moveTo(-0.72 * s, 0.18 * s);
+    ctx.bezierCurveTo(-0.35 * s, -0.18 * s, 0.1 * s, -0.5 * s, 0.62 * s, -0.52 * s);
+    ctx.lineTo(0.46 * s, -0.2 * s);
+    ctx.bezierCurveTo(0.05 * s, -0.18 * s, -0.3 * s, 0.06 * s, -0.58 * s, 0.42 * s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(-0.67 * s, 0.5 * s);
+    ctx.bezierCurveTo(-0.3 * s, 0.3 * s, 0.08 * s, 0.22 * s, 0.48 * s, 0.12 * s);
+    ctx.stroke();
+  }
+
+  function drawDeerCrest(scale) {
+    const s = scale;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+    ctx.beginPath();
+    ctx.moveTo(-0.68 * s, 0.18 * s);
+    ctx.bezierCurveTo(-0.55 * s, -0.22 * s, -0.18 * s, -0.35 * s, 0.16 * s, -0.22 * s);
+    ctx.lineTo(0.38 * s, -0.5 * s);
+    ctx.lineTo(0.48 * s, -0.16 * s);
+    ctx.bezierCurveTo(0.72 * s, -0.08 * s, 0.76 * s, 0.18 * s, 0.48 * s, 0.3 * s);
+    ctx.lineTo(0.12 * s, 0.44 * s);
+    ctx.bezierCurveTo(-0.3 * s, 0.58 * s, -0.6 * s, 0.46 * s, -0.68 * s, 0.18 * s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(0.1 * s, -0.26 * s);
+    ctx.lineTo(-0.02 * s, -0.66 * s);
+    ctx.lineTo(-0.22 * s, -0.82 * s);
+    ctx.moveTo(-0.06 * s, -0.56 * s);
+    ctx.lineTo(0.18 * s, -0.78 * s);
+    ctx.moveTo(0.06 * s, -0.42 * s);
+    ctx.lineTo(0.32 * s, -0.58 * s);
+    ctx.moveTo(0.44 * s, 0.01 * s);
+    ctx.lineTo(0.56 * s, -0.05 * s);
+    ctx.stroke();
   }
 
   function drawSymbol(piece) {
     ctx.save();
     ctx.strokeStyle = "rgba(255, 255, 255, 0.88)";
     ctx.fillStyle = "rgba(255, 255, 255, 0.86)";
-    ctx.lineWidth = Math.max(2.5, piece.r * 0.12);
+    ctx.lineWidth = Math.max(2, piece.r * 0.105);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
+    ctx.shadowColor = "rgba(33, 15, 10, 0.26)";
+    ctx.shadowBlur = Math.max(1, piece.r * 0.055);
+    ctx.shadowOffsetY = Math.max(0.5, piece.r * 0.025);
 
-    const r = piece.r * 0.45;
+    const r = piece.r * 0.58;
     if (piece.symbol === 0) {
-      ctx.beginPath();
-      ctx.moveTo(-r, 0);
-      ctx.lineTo(r, 0);
-      ctx.moveTo(0, -r);
-      ctx.lineTo(0, r);
-      ctx.stroke();
+      drawFrostSprig(r);
     } else if (piece.symbol === 1) {
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.82, 0, Math.PI * 2);
-      ctx.stroke();
+      drawLeafSigil(r);
     } else if (piece.symbol === 2) {
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.7, -r * 0.55);
-      ctx.lineTo(r * 0.72, r * 0.52);
-      ctx.moveTo(r * 0.72, -r * 0.55);
-      ctx.lineTo(-r * 0.7, r * 0.52);
-      ctx.stroke();
+      drawFlameShard(r);
     } else if (piece.symbol === 3) {
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.84, r * 0.45);
-      ctx.quadraticCurveTo(0, -r * 0.9, r * 0.84, r * 0.45);
-      ctx.stroke();
+      drawMountainPine(r);
+    } else if (piece.symbol === 4) {
+      drawCometMark(r);
     } else {
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2);
-      ctx.fill();
+      drawDeerCrest(piece.r * 0.62);
     }
     ctx.restore();
   }
