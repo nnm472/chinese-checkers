@@ -502,7 +502,9 @@
   function showSkillAnnouncement(team, icon, text, duration = 1800) {
     window.clearTimeout(state.announcementTimer);
     if (!el.skillAnnouncement) return;
+    const facesGreenPlayer = state.mode === "twoPlayer" && team === "green";
     el.skillAnnouncement.dataset.team = team;
+    el.skillAnnouncement.classList.toggle("is-facing-green", facesGreenPlayer);
     el.skillAnnouncementIcon.textContent = icon;
     el.skillAnnouncementTeam.textContent = `${COLORS[team].name}が「${icon}」を発動`;
     el.skillAnnouncementText.textContent = text;

@@ -299,13 +299,14 @@ button {
 }
 
 .skill-announcement {
+  --announcement-rotation: 0deg;
   position: fixed;
   z-index: 20;
   left: 50%;
   top: 50%;
   width: min(86vw, 380px);
   min-height: 116px;
-  transform: translate(-50%, -50%) scale(1);
+  transform: translate(-50%, -50%) rotate(var(--announcement-rotation)) scale(1);
   padding: 18px;
   display: grid;
   grid-template-columns: 76px 1fr;
@@ -322,7 +323,11 @@ button {
 
 .skill-announcement.hidden {
   opacity: 0;
-  transform: translate(-50%, -50%) scale(0.94);
+  transform: translate(-50%, -50%) rotate(var(--announcement-rotation)) scale(0.94);
+}
+
+.skill-announcement.is-facing-green {
+  --announcement-rotation: 180deg;
 }
 
 .skill-announcement[data-team="red"] {
@@ -333,10 +338,6 @@ button {
 .skill-announcement[data-team="green"] {
   --skill-ready: rgba(118, 238, 178, 0.96);
   --announce-color: var(--green);
-}
-
-.skill-announcement[data-team="green"].hidden {
-  transform: translate(-50%, -50%) scale(0.94);
 }
 
 .skill-announcement__icon {
