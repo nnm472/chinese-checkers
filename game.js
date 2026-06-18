@@ -45,6 +45,8 @@
   const CPU_POWER_ANNOUNCE_DELAY_MS = 1800;
   const CPU_POWER_PREVIEW_GAP_MS = 120;
   const CPU_TARGET_RANDOMNESS = 0.72;
+  const CPU_EDGE_TARGET_MAX_DIST = 520;
+  const CPU_GROW_EDGE_THRESHOLD = 0.54;
   const RESULT_DELAY_MS = 1000;
 
   const COLORS = {
@@ -826,7 +828,20 @@
 
   function cpuAttackScore(candidate) {
     const closeScore = 1 - clampNumber(candidate.dist / 950, 0, 1);
-    return candidate.edge * 2.25 + closeScore * 1.1 + Math.random() * CPU_TARGET_RANDOMNESS;
+    const sizePriority = { huge: 4.2, large: 3.2, medium: 1.55, small: 0 };
+    const edgeRange = clampNumber(1 - candidate.dist / CPU_EDGE_TARGET_MAX_DIST, 0, 1);
+    const edgeBonus = candidate.edge * edgeRange * 1.8;
+    const farEdgePenalty =
+      candidate.edge > 0.45 && candidate.dist > CPU_EDGE_TARGET_MAX_DIST
+        ? candidate.edge * 1.25
+        : 0;
+    return (
+      (sizePriority[candidate.target.size] ?? 0) +
+      closeScore * 1.15 +
+      edgeBonus -
+      farEdgePenalty +
+      Math.random() * CPU_TARGET_RANDOMNESS
+    );
   }
 
   function hasFriendlyBeyondTarget(shot) {
@@ -882,9 +897,16 @@
       .map((piece) => ({
         piece,
         score: priority[piece.size] ?? 2,
+        edge: edgePressure(piece),
         noise: Math.random(),
       }))
-      .sort((a, b) => a.score - b.score || a.noise - b.noise)[0].piece;
+      .sort(
+        (a, b) =>
+          a.score - b.score ||
+          Number(a.edge >= CPU_GROW_EDGE_THRESHOLD) - Number(b.edge >= CPU_GROW_EDGE_THRESHOLD) ||
+          a.edge - b.edge ||
+          a.noise - b.noise,
+      )[0].piece;
   }
 
   function maybeUseCpuGrow() {
