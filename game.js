@@ -113,7 +113,7 @@
   const tutorialSlides = [
     {
       title: "引いて弾く",
-      text: "自分の色のコマを選び、引いた方向と反対へ発射します。引ける距離には上限があります。",
+      text: "自分の色のコマを選び、引いた方向と反対へ発射します。",
       art: `
         <div class="tutorial-board">
           <span class="mini-piece red" style="left: 136px; top: 52px;"></span>
@@ -123,8 +123,8 @@
       `,
     },
     {
-      title: "盤外は除去",
-      text: "上下左右どこから出ても落下です。自分のコマを落としてしまった場合も、そのまま取り除かれます。",
+      title: "盤外に出ると除去",
+      text: "上下左右どこから出ても落下です。自分のコマを落とさないようにしましょう。",
       art: `
         <div class="tutorial-board">
           <span class="mini-piece green" style="left: 88px; top: 42px;"></span>
@@ -135,7 +135,7 @@
     },
     {
       title: "反射板",
-      text: "盤の中央付近にある水平の反射板だけが跳ね返します。盤の外枠は壁ではありません。",
+      text: "盤の中央にある水平の蝶番はコマが跳ね返ります。",
       art: `
         <div class="tutorial-board">
           <span class="mini-bumper" style="left: 38px; top: 64px;"></span>
@@ -146,7 +146,7 @@
     },
     {
       title: "勝利条件",
-      text: "相手チームのコマをすべて盤外に落としたら勝利です。落とせなくてもターンは交代します。",
+      text: "相手チームのコマをすべて盤外に落としたら勝利です。",
       art: `
         <div class="tutorial-board">
           <span class="mini-piece red" style="left: 94px; bottom: 34px;"></span>
@@ -442,12 +442,12 @@
 
     if (skillKey === "power") {
       state.powerBoostTeam = team;
-      showSkillAnnouncement(team, skill.label, "この手番だけ、引ける距離2倍・威力50%アップ");
+      showSkillAnnouncement(team, skill.label, "この手番だけ威力アップ");
       updateHud();
       setStatusText("強 発動: 威力50%アップ");
     } else if (skillKey === "rest") {
       state.skipCredits[team] += 1;
-      showSkillAnnouncement(team, skill.label, "この手番の後、相手の手番を1回スキップ");
+      showSkillAnnouncement(team, skill.label, "相手の手番を1回スキップ");
       updateHud();
       setStatusText("休 発動: 次も自分の番");
     } else if (skillKey === "grow") {
