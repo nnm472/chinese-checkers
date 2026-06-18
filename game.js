@@ -26,17 +26,22 @@
   const SMALL_SPEED_MULTIPLIER = 0.9;
   const POWER_DRAG_MULTIPLIER = 1.5;
   const POWER_LAUNCH_MULTIPLIER = 1.25;
-  const CPU_POWER_USE_CHANCE = 0.72;
+  const CPU_POWER_USE_CHANCE = 0.88;
   const CPU_POWER_USE_CHANCE_BANKED = 0.95;
-  const CPU_ATTACK_POWER = 0.9;
-  const CPU_ATTACK_POWER_JITTER = 0.08;
+  const CPU_POWER_USE_CHANCE_MAXED = 1;
+  const CPU_ATTACK_POWER_MIN = 0.84;
+  const CPU_ATTACK_POWER_MAX = 1;
+  const CPU_RISKY_ATTACK_POWER_MIN = 0.55;
+  const CPU_RISKY_ATTACK_POWER_MAX = 0.72;
   const CPU_POWERED_MIN_POWER = 0.95;
-  const CPU_CENTER_POWER = 0.62;
-  const CPU_CENTER_POWER_JITTER = 0.1;
+  const CPU_CENTER_POWER_MIN = 0.9;
+  const CPU_CENTER_POWER_MAX = 1;
+  const CPU_MIN_POWER = 0.5;
   const CPU_ATTACK_MIN_ANGLE_ERROR = 1.1;
   const CPU_ATTACK_MAX_ANGLE_ERROR = 3.0;
   const CPU_CENTER_ANGLE_ERROR = 4.0;
   const CPU_PREVIEW_DELAY_MS = 500;
+  const RESULT_DELAY_MS = 1000;
 
   const COLORS = {
     red: {
@@ -122,7 +127,6 @@
     tutorialBackButton: document.getElementById("tutorialBackButton"),
     tutorialNextButton: document.getElementById("tutorialNextButton"),
     winnerTitle: document.getElementById("winnerTitle"),
-    winnerText: document.getElementById("winnerText"),
   };
 
   const tutorialSlides = [
@@ -130,10 +134,10 @@
       title: "引いて弾く",
       text: "自分の色のコマを選び、引いた方向と反対へ発射します。",
       art: `
-        <div class="tutorial-board">
-          <span class="mini-piece red" style="left: 136px; top: 52px;"></span>
-          <span class="mini-pull" style="left: 67px; top: 68px;"></span>
-          <span class="mini-arrow" style="left: 176px; top: 68px;"></span>
+        <div class="tutorial-board tutorial-board--pull">
+          <span class="mini-piece mini-piece--large red" style="left: 108px; top: 44px;"></span>
+          <span class="mini-pull" style="left: 34px; top: 76px;"></span>
+          <span class="mini-arrow" style="left: 172px; top: 76px;"></span>
         </div>
       `,
     },
@@ -141,10 +145,10 @@
       title: "盤外に出ると除去",
       text: "上下左右どこから出ても落下です。自分のコマを落とさないようにしましょう。",
       art: `
-        <div class="tutorial-board">
-          <span class="mini-piece green" style="left: 88px; top: 42px;"></span>
-          <span class="mini-piece red" style="right: -10px; bottom: 32px;"></span>
-          <span class="mini-drop" style="right: 10px; bottom: 22px;"></span>
+        <div class="tutorial-board tutorial-board--drop">
+          <span class="mini-piece red mini-piece--falling" style="right: -19px; bottom: 34px;"></span>
+          <span class="mini-drop-zone" style="right: -28px; bottom: 22px;">盤外</span>
+          <span class="mini-fall-line"></span>
         </div>
       `,
     },
@@ -152,10 +156,17 @@
       title: "反射板",
       text: "盤の中央にある水平の蝶番はコマが跳ね返ります。",
       art: `
-        <div class="tutorial-board">
-          <span class="mini-bumper" style="left: 38px; top: 64px;"></span>
-          <span class="mini-bumper" style="right: 38px; top: 64px;"></span>
-          <span class="mini-piece red" style="left: 198px; top: 36px;"></span>
+        <div class="tutorial-board tutorial-board--bounce">
+          <span class="mini-bumper" style="left: 28px; top: 72px;"></span>
+          <span class="mini-piece red" style="left: 78px; top: 30px;"></span>
+          <svg class="mini-v-arrow" viewBox="0 0 250 130" aria-hidden="true">
+            <defs>
+              <marker id="miniArrowHead" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 Z"></path>
+              </marker>
+            </defs>
+            <path d="M94 48 L112 82 L170 38" marker-end="url(#miniArrowHead)"></path>
+          </svg>
         </div>
       `,
     },
@@ -164,10 +175,10 @@
       text: "ゲームが進むと特殊能力を使えます。Power・Skip・Grow・Stealで手番を有利に進めましょう。",
       art: `
         <div class="tutorial-board tutorial-board--skills">
-          <span class="mini-skill" style="left: 22px; top: 22px;">Power</span>
-          <span class="mini-skill" style="right: 22px; top: 22px;">Skip</span>
-          <span class="mini-skill" style="left: 22px; bottom: 22px;">Grow</span>
-          <span class="mini-skill" style="right: 22px; bottom: 22px;">Steal</span>
+          <span class="mini-skill"><strong>Power</strong><small>1ターンだけはじくパワー上昇</small></span>
+          <span class="mini-skill"><strong>Skip</strong><small>相手のターンを飛ばす</small></span>
+          <span class="mini-skill"><strong>Grow</strong><small>自分の駒1個のサイズアップ</small></span>
+          <span class="mini-skill"><strong>Steal</strong><small>相手の駒1個を自分のものに</small></span>
         </div>
       `,
     },
@@ -175,11 +186,11 @@
       title: "勝利条件",
       text: "相手チームのコマをすべて盤外に落としたら勝利です。",
       art: `
-        <div class="tutorial-board">
-          <span class="mini-piece red" style="left: 94px; bottom: 34px;"></span>
-          <span class="mini-piece red" style="left: 146px; bottom: 34px;"></span>
-          <span class="mini-piece green" style="right: 42px; top: 38px;"></span>
-          <span class="mini-drop" style="right: 32px; top: 28px;"></span>
+        <div class="tutorial-board tutorial-board--win">
+          <span class="mini-piece red" style="left: 78px; bottom: 32px;"></span>
+          <span class="mini-piece red" style="left: 130px; bottom: 52px;"></span>
+          <span class="mini-piece red" style="left: 184px; bottom: 30px;"></span>
+          <span class="mini-victory-line"></span>
         </div>
       `,
     },
@@ -202,6 +213,7 @@
     cpuThinking: false,
     cpuTimer: null,
     cpuPreview: null,
+    resultTimer: null,
     sound: true,
     skillPoints: {
       red: 0,
@@ -346,6 +358,7 @@
 
   function resetGame(mode = state.mode) {
     window.clearTimeout(state.cpuTimer);
+    window.clearTimeout(state.resultTimer);
     state.pieces = [];
     state.effects = [];
     state.turn = "red";
@@ -354,6 +367,7 @@
     state.cpuThinking = false;
     state.cpuTimer = null;
     state.cpuPreview = null;
+    state.resultTimer = null;
     state.selected = null;
     state.pointer = null;
     state.settleTime = 0;
@@ -602,6 +616,8 @@
   }
 
   function showTitle() {
+    window.clearTimeout(state.resultTimer);
+    state.resultTimer = null;
     state.phase = "ready";
     state.selected = null;
     state.pointer = null;
@@ -770,6 +786,60 @@
     return (randomRange(-errorDegrees, errorDegrees) * Math.PI) / 180;
   }
 
+  function edgePressure(piece) {
+    const left = piece.x - DROP_BOUNDS.x;
+    const right = DROP_BOUNDS.x + DROP_BOUNDS.w - piece.x;
+    const top = piece.y - DROP_BOUNDS.y;
+    const bottom = DROP_BOUNDS.y + DROP_BOUNDS.h - piece.y;
+    const nearestEdge = Math.min(left, right, top, bottom);
+    return 1 - clampNumber(nearestEdge / 260, 0, 1);
+  }
+
+  function hasFriendlyBeyondTarget(shot) {
+    if (shot.kind !== "attack") return false;
+    const { piece, target, dist } = shot;
+    if (!target) return false;
+    const ux = (target.x - piece.x) / (dist || 1);
+    const uy = (target.y - piece.y) / (dist || 1);
+    return livePieces(piece.team).some((friend) => {
+      if (friend === piece) return false;
+      const relX = friend.x - piece.x;
+      const relY = friend.y - piece.y;
+      const along = relX * ux + relY * uy;
+      if (along <= dist + target.r * 0.7 || along > dist + 320) return false;
+      const side = Math.abs(relX * -uy + relY * ux);
+      return side < friend.r + target.r + 36;
+    });
+  }
+
+  function shotMayBounceBack(shot) {
+    if (shot.kind !== "attack") return false;
+    const start = { x: shot.piece.x, y: shot.piece.y };
+    const end = { x: shot.target.x, y: shot.target.y };
+    return BUMPERS.some((bumper) => segmentNearRect(start, end, bumper, shot.piece.r + 18));
+  }
+
+  function cpuPowerRatio(shot, usedPower) {
+    const risky = hasFriendlyBeyondTarget(shot) || shotMayBounceBack(shot);
+    let ratio;
+
+    if (shot.kind !== "attack") {
+      ratio = randomRange(CPU_CENTER_POWER_MIN, CPU_CENTER_POWER_MAX);
+    } else if (risky) {
+      ratio = randomRange(CPU_RISKY_ATTACK_POWER_MIN, CPU_RISKY_ATTACK_POWER_MAX);
+    } else {
+      ratio = randomRange(CPU_ATTACK_POWER_MIN, CPU_ATTACK_POWER_MAX);
+    }
+
+    if (usedPower) {
+      ratio = shot.kind === "attack" && !hasFriendlyBeyondTarget(shot)
+        ? 1
+        : Math.max(ratio, CPU_POWERED_MIN_POWER);
+    }
+
+    return clampNumber(ratio, CPU_MIN_POWER, 1);
+  }
+
   function maybeUseCpuPower(shot) {
     const skill = SKILLS.power;
     const points = state.skillPoints[state.cpuTeam] || 0;
@@ -777,15 +847,19 @@
       state.mode === "singlePlayer" &&
       state.turn === state.cpuTeam &&
       points >= skill.cost;
-    const usefulShot = shot.kind === "attack" ? shot.dist > 120 : shot.dist > 260;
-    const useChance = points >= skill.cost * 2 ? CPU_POWER_USE_CHANCE_BANKED : CPU_POWER_USE_CHANCE;
-    if (!canUsePower || !usefulShot || Math.random() >= useChance) {
+    let useChance = CPU_POWER_USE_CHANCE;
+    if (points >= SKILLS.steal.cost) {
+      useChance = CPU_POWER_USE_CHANCE_MAXED;
+    } else if (points >= skill.cost * 2) {
+      useChance = CPU_POWER_USE_CHANCE_BANKED;
+    }
+    if (!canUsePower || !shot || Math.random() >= useChance) {
       return false;
     }
 
     state.skillPoints[state.cpuTeam] = Math.max(0, state.skillPoints[state.cpuTeam] - skill.cost);
     state.powerBoostTeam = state.cpuTeam;
-    showSkillAnnouncement(state.cpuTeam, skill.label, "CPUがこの手番だけ威力アップ", 1200);
+    showSkillAnnouncement(state.cpuTeam, skill.label, "CPUがこの手番だけ威力アップ", 1500);
     setStatusText("CPUがPower発動");
     updateSkillMeters();
     return true;
@@ -801,12 +875,12 @@
       enemies.forEach((target) => {
         const dist = Math.hypot(target.x - piece.x, target.y - piece.y);
         if (isCpuLineClear(piece, target)) {
-          candidates.push({ piece, target, dist, kind: "attack" });
+          candidates.push({ piece, target, dist, edge: edgePressure(target), kind: "attack" });
         }
       });
     });
 
-    candidates.sort((a, b) => a.dist - b.dist);
+    candidates.sort((a, b) => b.edge - a.edge || a.dist - b.dist);
     if (candidates.length) return candidates[0];
 
     const center = { x: BOARD.x + BOARD.w / 2, y: BOARD.y + BOARD.h / 2 };
@@ -842,8 +916,8 @@
     const ux = baseUx * cos - baseUy * sin;
     const uy = baseUx * sin + baseUy * cos;
     const massSpeedOffset = 0.84 + piece.mass * 0.07;
-    const clampedPower = clampNumber(powerRatio, 0.2, 1);
-    const virtualDrag = Math.min(getMaxDrag(piece) * clampedPower, dist * 0.55);
+    const clampedPower = clampNumber(powerRatio, CPU_MIN_POWER, 1);
+    const virtualDrag = getMaxDrag(piece) * clampedPower;
     const boost = state.powerBoostTeam === piece.team ? POWER_LAUNCH_MULTIPLIER : 1;
     const launchScale = (8.35 * LAUNCH_POWER * boost) / massSpeedOffset;
     piece.vx = ux * virtualDrag * launchScale;
@@ -851,7 +925,7 @@
     applyPieceSpeedTuning(piece);
     state.phase = "moving";
     state.settleTime = 0;
-    playTone("launch", 0.85);
+    playTone("launch", Math.min(1.25, 0.55 + clampedPower));
     updateHud();
   }
 
@@ -864,12 +938,7 @@
       return;
     }
     const usedPower = maybeUseCpuPower(shot);
-    const basePower = shot.kind === "attack" ? CPU_ATTACK_POWER : CPU_CENTER_POWER;
-    const jitter = shot.kind === "attack" ? CPU_ATTACK_POWER_JITTER : CPU_CENTER_POWER_JITTER;
-    let ratio = randomRange(basePower - jitter, basePower + jitter);
-    if (usedPower) {
-      ratio = Math.max(ratio, CPU_POWERED_MIN_POWER);
-    }
+    const ratio = cpuPowerRatio(shot, usedPower);
     const angleOffset = cpuAngleErrorRadians(shot);
     state.cpuPreview = {
       piece: shot.piece,
@@ -1148,10 +1217,13 @@
     if (red === 0 || green === 0) {
       const winner = red > green ? "red" : "green";
       el.winnerTitle.textContent = `${COLORS[winner].name}の勝利`;
-      el.winnerText.textContent = `赤 ${red}個 / 緑 ${green}個`;
       state.phase = "result";
       playTone("win", 0.85);
-      setOverlay("result");
+      window.clearTimeout(state.resultTimer);
+      state.resultTimer = window.setTimeout(() => {
+        state.resultTimer = null;
+        setOverlay("result");
+      }, RESULT_DELAY_MS);
       return true;
     }
 
@@ -1298,23 +1370,43 @@
   function drawBumpers() {
     BUMPERS.forEach((bumper) => {
       ctx.save();
-      ctx.shadowColor = "rgba(0, 0, 0, 0.32)";
-      ctx.shadowBlur = 9;
-      ctx.shadowOffsetY = 6;
+      ctx.globalAlpha = 0.86;
+      ctx.shadowColor = "rgba(0, 0, 0, 0.24)";
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 5;
       roundedRect(ctx, bumper.x, bumper.y, bumper.w, bumper.h, bumper.h / 2);
       const gradient = ctx.createLinearGradient(bumper.x, bumper.y, bumper.x, bumper.y + bumper.h);
-      gradient.addColorStop(0, "#f7db9a");
-      gradient.addColorStop(0.5, "#b87836");
-      gradient.addColorStop(1, "#6f3d1c");
+      gradient.addColorStop(0, "#f7f8f2");
+      gradient.addColorStop(0.42, "#aeb6b6");
+      gradient.addColorStop(0.58, "#707b7d");
+      gradient.addColorStop(1, "#d4d9d6");
       ctx.fillStyle = gradient;
       ctx.fill();
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = "rgba(61, 35, 17, 0.96)";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(53, 58, 58, 0.82)";
       ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(bumper.x + 16, bumper.y + bumper.h / 2);
+      ctx.lineTo(bumper.x + bumper.w - 16, bumper.y + bumper.h / 2);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(44, 49, 50, 0.62)";
+      for (let i = 0; i < 4; i += 1) {
+        const x = bumper.x + 28 + i * ((bumper.w - 56) / 3);
+        ctx.beginPath();
+        ctx.arc(x, bumper.y + bumper.h / 2, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.44)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
       ctx.restore();
 
       ctx.save();
-      ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.32)";
       roundedRect(ctx, bumper.x + 12, bumper.y + 4, bumper.w - 24, 5, 3);
       ctx.fill();
       ctx.restore();
@@ -1348,20 +1440,24 @@
     if (piece.maxMark) {
       ctx.save();
       ctx.shadowBlur = 0;
-      ctx.setLineDash([piece.r * 0.26, piece.r * 0.16]);
-      ctx.lineWidth = Math.max(2, piece.r * 0.055);
-      ctx.strokeStyle = "rgba(255, 224, 109, 0.92)";
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.lineWidth = Math.max(4, piece.r * 0.12);
+      ctx.strokeStyle = "rgba(255, 232, 112, 0.94)";
       ctx.beginPath();
-      ctx.arc(0, 0, piece.r * 0.78, 0, Math.PI * 2);
+      ctx.moveTo(-piece.r * 0.42, -piece.r * 0.56);
+      ctx.lineTo(piece.r * 0.1, -piece.r * 0.12);
+      ctx.lineTo(-piece.r * 0.04, -piece.r * 0.1);
+      ctx.lineTo(piece.r * 0.42, piece.r * 0.55);
       ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = "rgba(255, 246, 190, 0.88)";
-      for (let i = 0; i < 6; i += 1) {
-        const angle = (Math.PI * 2 * i) / 6;
-        ctx.beginPath();
-        ctx.arc(Math.cos(angle) * piece.r * 0.56, Math.sin(angle) * piece.r * 0.56, piece.r * 0.055, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      ctx.lineWidth = Math.max(2, piece.r * 0.045);
+      ctx.strokeStyle = "rgba(255, 250, 198, 0.78)";
+      ctx.beginPath();
+      ctx.moveTo(-piece.r * 0.5, piece.r * 0.08);
+      ctx.lineTo(-piece.r * 0.18, piece.r * 0.34);
+      ctx.moveTo(piece.r * 0.18, -piece.r * 0.46);
+      ctx.lineTo(piece.r * 0.5, -piece.r * 0.2);
+      ctx.stroke();
       ctx.restore();
     }
 

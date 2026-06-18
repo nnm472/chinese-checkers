@@ -320,11 +320,10 @@ button {
 .skill-announcement[data-team="green"] {
   --skill-ready: rgba(118, 238, 178, 0.96);
   --announce-color: var(--green);
-  transform: translate(-50%, -50%) rotate(180deg) scale(1);
 }
 
 .skill-announcement[data-team="green"].hidden {
-  transform: translate(-50%, -50%) rotate(180deg) scale(0.94);
+  transform: translate(-50%, -50%) scale(0.94);
 }
 
 .skill-announcement__icon {
@@ -432,6 +431,24 @@ button {
   overflow: hidden;
 }
 
+#resultScreen {
+  place-items: end center;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.screen-card--result {
+  width: min(100%, 360px);
+  padding: 16px;
+  background: rgba(20, 20, 17, 0.78);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+#resultScreen .screen-card--result h2 {
+  font-size: 1.55rem;
+  text-align: center;
+}
+
 .screen-card h2 {
   margin: 0;
   font-size: 2.1rem;
@@ -497,7 +514,7 @@ button {
 }
 
 .tutorial-art {
-  min-height: 160px;
+  min-height: 190px;
   margin-bottom: 16px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -535,11 +552,28 @@ button {
   background: var(--green);
 }
 
+.mini-piece--large {
+  width: 58px;
+  height: 58px;
+  box-shadow:
+    inset -9px -10px 16px rgba(0, 0, 0, 0.28),
+    inset 8px 8px 12px rgba(255, 255, 255, 0.68),
+    0 0 0 3px rgba(255, 247, 232, 0.36);
+}
+
+.mini-piece--falling {
+  z-index: 2;
+}
+
 .mini-arrow,
 .mini-pull,
 .mini-bumper,
 .mini-drop,
-.mini-skill {
+.mini-skill,
+.mini-drop-zone,
+.mini-fall-line,
+.mini-v-arrow,
+.mini-victory-line {
   position: absolute;
 }
 
@@ -568,9 +602,29 @@ button {
   width: 96px;
   height: 18px;
   border-radius: 9px;
-  background: #f6cf8d;
-  border: 3px solid #6f4120;
-  box-shadow: 0 7px 0 rgba(58, 35, 19, 0.28);
+  background: linear-gradient(#f4f6f1, #879193 48%, #d9dedb);
+  border: 2px solid rgba(58, 64, 66, 0.88);
+  box-shadow: 0 6px 0 rgba(50, 55, 56, 0.22);
+}
+
+.mini-bumper::before,
+.mini-bumper::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(46, 51, 52, 0.72);
+  transform: translateY(-50%);
+}
+
+.mini-bumper::before {
+  left: 18px;
+}
+
+.mini-bumper::after {
+  right: 18px;
 }
 
 .mini-drop {
@@ -580,7 +634,57 @@ button {
   border-radius: 50%;
 }
 
+.mini-drop-zone {
+  width: 68px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  border: 3px dashed rgba(255, 255, 255, 0.82);
+  border-radius: 8px;
+  color: #fff7e8;
+  background: rgba(8, 8, 7, 0.22);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.mini-fall-line {
+  right: 0;
+  top: 0;
+  bottom: 0;
+  border-left: 4px solid rgba(255, 247, 232, 0.86);
+}
+
+.mini-v-arrow {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: #f7e46c;
+  stroke: #f7e46c;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.mini-v-arrow path {
+  fill: none;
+}
+
+.mini-victory-line {
+  left: 44px;
+  right: 44px;
+  top: 34px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 247, 232, 0.7);
+  box-shadow: 0 20px 0 rgba(255, 247, 232, 0.28);
+}
+
 .tutorial-board--skills {
+  display: grid;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
   background:
     radial-gradient(circle at 50% 50%, rgba(255, 224, 109, 0.22), transparent 62px),
     linear-gradient(rgba(38, 22, 14, 0.24) 2px, transparent 2px),
@@ -589,11 +693,12 @@ button {
 }
 
 .mini-skill {
-  min-width: 72px;
-  min-height: 34px;
-  padding: 0 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px 10px;
   display: grid;
-  place-items: center;
+  align-content: center;
+  gap: 2px;
   border-radius: 8px;
   color: #fff7e8;
   background: rgba(30, 27, 21, 0.72);
@@ -601,6 +706,22 @@ button {
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
   font-size: 0.92rem;
   font-weight: 900;
+}
+
+.tutorial-board--skills .mini-skill {
+  position: relative;
+}
+
+.mini-skill strong,
+.mini-skill small {
+  display: block;
+  line-height: 1.15;
+}
+
+.mini-skill small {
+  color: #eadfc4;
+  font-size: 0.66rem;
+  font-weight: 800;
 }
 
 @media (min-width: 760px) {
