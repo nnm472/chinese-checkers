@@ -52,6 +52,11 @@
   const CPU_GROW_EDGE_THRESHOLD = 0.54;
   const CPU_RESCUE_EDGE_THRESHOLD = 0.58;
   const CPU_RESCUE_CHANCE = 0.62;
+  const STRONG_CPU_BASE_LIMIT = 14;
+  const STRONG_CPU_POWER_BASE_LIMIT = 6;
+  const STRONG_CPU_SIM_TIME = 2.25;
+  const STRONG_CPU_SIM_DT = 1 / 75;
+  const STRONG_CPU_SIM_SETTLE = 0.26;
   const RESULT_DELAY_MS = 1000;
 
   const COLORS = {
@@ -108,6 +113,7 @@
     pauseScreen: document.getElementById("pauseScreen"),
     resultScreen: document.getElementById("resultScreen"),
     singleStartButton: document.getElementById("singleStartButton"),
+    strongCpuStartButton: document.getElementById("strongCpuStartButton"),
     twoPlayerStartButton: document.getElementById("twoPlayerStartButton"),
     tutorialButton: document.getElementById("tutorialButton"),
     pauseButton: document.getElementById("pauseButton"),
@@ -220,6 +226,7 @@
     overlay: "title",
     mode: "twoPlayer",
     cpuTeam: "green",
+    cpuDifficulty: "weak",
     cpuThinking: false,
     cpuTimer: null,
     cpuPreview: null,
@@ -369,7 +376,7 @@
     });
   }
 
-  function resetGame(mode = state.mode) {
+  function resetGame(mode = state.mode, cpuDifficulty = state.cpuDifficulty) {
     window.clearTimeout(state.cpuTimer);
     window.clearTimeout(state.resultTimer);
     state.pieces = [];
@@ -377,6 +384,7 @@
     state.turn = "red";
     state.phase = "ready";
     state.mode = mode;
+    state.cpuDifficulty = mode === "singlePlayer" ? cpuDifficulty : "weak";
     state.cpuThinking = false;
     state.cpuTimer = null;
     state.cpuPreview = null;
@@ -643,8 +651,8 @@
     el.resultScreen.classList.toggle("hidden", name !== "result");
   }
 
-  function startMatch(mode = state.mode) {
-    resetGame(mode);
+  function startMatch(mode = state.mode, cpuDifficulty = state.cpuDifficulty) {
+    resetGame(mode, cpuDifficulty);
     setOverlay(null);
   }
 
@@ -849,6 +857,511 @@
     );
   }
 
+  function isStrongCpu() {
+    return state.mode === "singlePlayer" && state.cpuDifficulty === "strong";
+  }
+
+  function pieceValue(piece) {
+    const values = { small: 150, medium: 320, large: 760, huge: 980 };
+    return values[piece?.size] ?? 260;
+  }
+
+  function centerControlScore(piece) {
+    const centerX = BOARD.x + BOARD.w / 2;
+    const centerY = BOARD.y + BOARD.h / 2;
+    return 1 - clampNumber(Math.hypot(piece.x - centerX, piece.y - centerY) / 650, 0, 1);
+  }
+
+  function outwardVector(piece) {
+    const edgeRange = 260;
+    const left = piece.x - DROP_BOUNDS.x;
+    const right = DROP_BOUNDS.x + DROP_BOUNDS.w - piece.x;
+    const top = piece.y - DROP_BOUNDS.y;
+    const bottom = DROP_BOUNDS.y + DROP_BOUNDS.h - piece.y;
+    let x = 0;
+    let y = 0;
+
+    if (left < edgeRange) x -= (edgeRange - left) / edgeRange;
+    if (right < edgeRange) x += (edgeRange - right) / edgeRange;
+    if (top < edgeRange) y -= (edgeRange - top) / edgeRange;
+    if (bottom < edgeRange) y += (edgeRange - bottom) / edgeRange;
+
+    const len = Math.hypot(x, y);
+    if (len > 0.001) return { x: x / len, y: y / len };
+
+    const centerX = DROP_BOUNDS.x + DROP_BOUNDS.w / 2;
+    const centerY = DROP_BOUNDS.y + DROP_BOUNDS.h / 2;
+    const fallbackX = piece.x - centerX;
+    const fallbackY = piece.y - centerY;
+    const fallbackLen = Math.hypot(fallbackX, fallbackY) || 1;
+    return { x: fallbackX / fallbackLen, y: fallbackY / fallbackLen };
+  }
+
+  function clampToDropBounds(point, margin = 6) {
+    return {
+      x: clampNumber(point.x, DROP_BOUNDS.x + margin, DROP_BOUNDS.x + DROP_BOUNDS.w - margin),
+      y: clampNumber(point.y, DROP_BOUNDS.y + margin, DROP_BOUNDS.y + DROP_BOUNDS.h - margin),
+    };
+  }
+
+  function approachAlignment(piece, target) {
+    const dx = target.x - piece.x;
+    const dy = target.y - piece.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const outward = outwardVector(target);
+    return (dx / dist) * outward.x + (dy / dist) * outward.y;
+  }
+
+  function strongAttackBaseScore(piece, target, aimTarget, variant) {
+    const dist = Math.hypot(aimTarget.x - piece.x, aimTarget.y - piece.y);
+    const targetEdge = edgePressure(target);
+    const alignment = approachAlignment(piece, target);
+    const sizeBonus = pieceValue(target) / 280;
+    const largeEdgeBonus = (target.size === "large" || target.size === "huge") ? targetEdge * 3.2 : 0;
+    const pushBonus = targetEdge > 0.32 ? alignment * 3.4 : alignment * 0.7;
+    const badSidePenalty = targetEdge > 0.48 && alignment < 0.08 ? 2.1 : 0;
+    const variantBonus = variant === "edgePush" ? 1.15 : 0;
+
+    return (
+      sizeBonus +
+      targetEdge * 1.55 +
+      largeEdgeBonus +
+      pushBonus +
+      variantBonus -
+      badSidePenalty -
+      dist / 900 +
+      Math.random() * 0.1
+    );
+  }
+
+  function makeStrongAttackShot(piece, target, aimTarget, variant) {
+    const dist = Math.hypot(aimTarget.x - piece.x, aimTarget.y - piece.y);
+    return {
+      piece,
+      target,
+      aimTarget,
+      dist,
+      edge: edgePressure(target),
+      pushAlignment: approachAlignment(piece, target),
+      kind: "attack",
+      variant,
+      baseScore: strongAttackBaseScore(piece, target, aimTarget, variant),
+    };
+  }
+
+  function strongAttackAimTargets(target) {
+    const aimTargets = [{ point: { x: target.x, y: target.y }, variant: "direct" }];
+    const targetEdge = edgePressure(target);
+    if (targetEdge > 0.28 || target.size === "large" || target.size === "huge") {
+      const outward = outwardVector(target);
+      aimTargets.push({
+        point: clampToDropBounds({
+          x: target.x + outward.x * target.r * 1.15,
+          y: target.y + outward.y * target.r * 1.15,
+        }),
+        variant: "edgePush",
+      });
+    }
+    return aimTargets;
+  }
+
+  function strongMoveBaseScore(piece, target, kind) {
+    const dist = Math.hypot(target.x - piece.x, target.y - piece.y);
+    const safetyGain = edgePressure(piece) * ((piece.size === "large" || piece.size === "huge") ? 3.7 : 1.4);
+    const centerScore = centerControlScore(target) * 1.2;
+    const kindBonus = kind === "rescue" ? 2.4 : 0.3;
+    return safetyGain + centerScore + kindBonus - dist / 1500 + Math.random() * 0.08;
+  }
+
+  function buildStrongCpuBaseShots() {
+    const own = livePieces(state.cpuTeam);
+    const opponentTeam = state.cpuTeam === "red" ? "green" : "red";
+    const enemies = livePieces(opponentTeam);
+    const attacks = [];
+    const support = [];
+
+    const rescue = chooseCpuRescueShot();
+    if (rescue) {
+      rescue.aimTarget = rescue.target;
+      rescue.baseScore = strongMoveBaseScore(rescue.piece, rescue.target, "rescue") + 4.4;
+      support.push(rescue);
+    }
+
+    own.forEach((piece) => {
+      enemies.forEach((target) => {
+        if (!isCpuLineClear(piece, target)) return;
+        strongAttackAimTargets(target).forEach(({ point, variant }) => {
+          if (!isCpuLineClear(piece, point)) return;
+          const dist = Math.hypot(point.x - piece.x, point.y - piece.y);
+          if (dist < 45 || dist > 1040) return;
+          attacks.push(makeStrongAttackShot(piece, target, point, variant));
+        });
+      });
+
+      if ((piece.size === "large" || piece.size === "huge") && edgePressure(piece) > 0.38) {
+        cpuSafeAnchors(piece).forEach((target) => {
+          const dist = Math.hypot(target.x - piece.x, target.y - piece.y);
+          if (dist <= 70 || !isCpuLineClear(piece, target)) return;
+          support.push({
+            piece,
+            target,
+            aimTarget: target,
+            dist,
+            kind: "rescue",
+            baseScore: strongMoveBaseScore(piece, target, "rescue"),
+          });
+        });
+      }
+    });
+
+    const center = { x: BOARD.x + BOARD.w / 2, y: BOARD.y + BOARD.h / 2 };
+    own
+      .filter((piece) => isCpuLineClear(piece, center))
+      .map((piece) => ({
+        piece,
+        target: center,
+        aimTarget: center,
+        dist: Math.hypot(center.x - piece.x, center.y - piece.y),
+        kind: "center",
+        baseScore: strongMoveBaseScore(piece, center, "center"),
+      }))
+      .sort((a, b) => b.baseScore - a.baseScore)
+      .slice(0, 4)
+      .forEach((shot) => support.push(shot));
+
+    attacks.sort((a, b) => b.baseScore - a.baseScore);
+    support.sort((a, b) => b.baseScore - a.baseScore);
+    return [...support.slice(0, 5), ...attacks.slice(0, STRONG_CPU_BASE_LIMIT)];
+  }
+
+  function clonePiecesForSimulation() {
+    const pieces = state.pieces.map((piece) => ({
+      source: piece,
+      id: piece.id,
+      team: piece.team,
+      size: piece.size,
+      symbol: piece.symbol,
+      x: piece.x,
+      y: piece.y,
+      vx: 0,
+      vy: 0,
+      r: piece.r,
+      mass: piece.mass,
+      active: piece.active,
+      angle: piece.angle,
+    }));
+    const bySource = new Map(pieces.map((piece) => [piece.source, piece]));
+    return { pieces, bySource };
+  }
+
+  function applySimPieceSpeedTuning(piece) {
+    if (piece.size !== "small") return;
+    piece.vx *= SMALL_SPEED_MULTIPLIER;
+    piece.vy *= SMALL_SPEED_MULTIPLIER;
+  }
+
+  function applySimDamping(piece, dt) {
+    const decay = Math.exp(-LINEAR_DAMPING * dt);
+    piece.vx *= decay;
+    piece.vy *= decay;
+    if (Math.hypot(piece.vx, piece.vy) < STOP_SPEED) {
+      piece.vx = 0;
+      piece.vy = 0;
+    }
+  }
+
+  function softenSimStrikerBounce(piece, beforeVx, beforeVy) {
+    const speed = Math.hypot(beforeVx, beforeVy);
+    if (speed < STOP_SPEED) return;
+    const ux = beforeVx / speed;
+    const uy = beforeVy / speed;
+    const px = -uy;
+    const py = ux;
+    const along = piece.vx * ux + piece.vy * uy;
+    const side = piece.vx * px + piece.vy * py;
+    piece.vx = ux * (along * STRIKER_ALONG_DAMPING) + px * side;
+    piece.vy = uy * (along * STRIKER_ALONG_DAMPING) + py * side;
+  }
+
+  function collideSimPieces(a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const minDist = a.r + b.r;
+    const distSq = dx * dx + dy * dy;
+    if (distSq >= minDist * minDist) return;
+
+    const dist = Math.sqrt(distSq) || 0.0001;
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const overlap = minDist - dist;
+    const invA = 1 / a.mass;
+    const invB = 1 / b.mass;
+    const invSum = invA + invB;
+
+    a.x -= nx * overlap * (invA / invSum);
+    a.y -= ny * overlap * (invA / invSum);
+    b.x += nx * overlap * (invB / invSum);
+    b.y += ny * overlap * (invB / invSum);
+
+    const rvx = b.vx - a.vx;
+    const rvy = b.vy - a.vy;
+    const velAlongNormal = rvx * nx + rvy * ny;
+    if (velAlongNormal > 0) return;
+
+    const beforeA = { vx: a.vx, vy: a.vy };
+    const beforeB = { vx: b.vx, vy: b.vy };
+    const impulse = (-(1 + RESTITUTION) * velAlongNormal) / invSum;
+    const ix = impulse * nx;
+    const iy = impulse * ny;
+    a.vx -= ix * invA;
+    a.vy -= iy * invA;
+    b.vx += ix * invB;
+    b.vy += iy * invB;
+    softenSimStrikerBounce(a, beforeA.vx, beforeA.vy);
+    softenSimStrikerBounce(b, beforeB.vx, beforeB.vy);
+    applySimPieceSpeedTuning(a);
+    applySimPieceSpeedTuning(b);
+  }
+
+  function collideSimBumper(piece, bumper) {
+    const nearestX = Math.max(bumper.x, Math.min(piece.x, bumper.x + bumper.w));
+    const nearestY = Math.max(bumper.y, Math.min(piece.y, bumper.y + bumper.h));
+    let dx = piece.x - nearestX;
+    let dy = piece.y - nearestY;
+    let dist = Math.hypot(dx, dy);
+    let nx = dx / (dist || 1);
+    let ny = dy / (dist || 1);
+
+    if (dist === 0) {
+      const left = Math.abs(piece.x - bumper.x);
+      const right = Math.abs(piece.x - (bumper.x + bumper.w));
+      const top = Math.abs(piece.y - bumper.y);
+      const bottom = Math.abs(piece.y - (bumper.y + bumper.h));
+      const min = Math.min(left, right, top, bottom);
+      if (min === left) [nx, ny] = [-1, 0];
+      else if (min === right) [nx, ny] = [1, 0];
+      else if (min === top) [nx, ny] = [0, -1];
+      else [nx, ny] = [0, 1];
+      dist = 0;
+    }
+
+    if (dist > piece.r) return;
+    const penetration = piece.r - dist + 0.2;
+    piece.x += nx * penetration;
+    piece.y += ny * penetration;
+
+    const velNormal = piece.vx * nx + piece.vy * ny;
+    if (velNormal < 0) {
+      piece.vx -= (1 + BUMPER_RESTITUTION) * velNormal * nx;
+      piece.vy -= (1 + BUMPER_RESTITUTION) * velNormal * ny;
+    }
+  }
+
+  function launchSimPiece(piece, target, powerRatio, angleOffset, usedPower) {
+    const dx = target.x - piece.x;
+    const dy = target.y - piece.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const baseUx = dx / dist;
+    const baseUy = dy / dist;
+    const cos = Math.cos(angleOffset);
+    const sin = Math.sin(angleOffset);
+    const ux = baseUx * cos - baseUy * sin;
+    const uy = baseUx * sin + baseUy * cos;
+    const massSpeedOffset = 0.84 + piece.mass * 0.07;
+    const currentStacks = getPowerStacks(piece.team);
+    const simStacks = currentStacks + (usedPower ? 1 : 0);
+    const virtualDrag = MAX_DRAG * Math.pow(POWER_DRAG_MULTIPLIER, simStacks) * clampNumber(powerRatio, CPU_MIN_POWER, 1);
+    const boost = Math.pow(POWER_LAUNCH_MULTIPLIER, simStacks);
+    const launchScale = (8.35 * LAUNCH_POWER * boost) / massSpeedOffset;
+    piece.vx = ux * virtualDrag * launchScale;
+    piece.vy = uy * virtualDrag * launchScale;
+    applySimPieceSpeedTuning(piece);
+  }
+
+  function simulateStrongCpuShot(shot, powerRatio, angleOffset, usedPower) {
+    const sim = clonePiecesForSimulation();
+    const actor = sim.bySource.get(shot.piece);
+    if (!actor) return null;
+    launchSimPiece(actor, shot.aimTarget || shot.target, powerRatio, angleOffset, usedPower);
+
+    let settle = 0;
+    for (let t = 0; t < STRONG_CPU_SIM_TIME; t += STRONG_CPU_SIM_DT) {
+      const active = sim.pieces.filter((piece) => piece.active);
+      active.forEach((piece) => {
+        piece.x += piece.vx * STRONG_CPU_SIM_DT;
+        piece.y += piece.vy * STRONG_CPU_SIM_DT;
+        applySimDamping(piece, STRONG_CPU_SIM_DT);
+      });
+
+      for (let iteration = 0; iteration < 2; iteration += 1) {
+        for (let i = 0; i < active.length; i += 1) {
+          for (let j = i + 1; j < active.length; j += 1) {
+            if (active[i].active && active[j].active) collideSimPieces(active[i], active[j]);
+          }
+        }
+        active.forEach((piece) => {
+          if (!piece.active) return;
+          BUMPERS.forEach((bumper) => collideSimBumper(piece, bumper));
+        });
+      }
+
+      active.forEach((piece) => {
+        if (piece.active && isOutside(piece)) {
+          piece.active = false;
+          piece.vx = 0;
+          piece.vy = 0;
+        }
+      });
+
+      const moving = sim.pieces
+        .filter((piece) => piece.active)
+        .some((piece) => Math.hypot(piece.vx, piece.vy) >= STOP_SPEED);
+      settle = moving ? 0 : settle + STRONG_CPU_SIM_DT;
+      if (settle > STRONG_CPU_SIM_SETTLE) break;
+    }
+
+    const friendlyDropped = sim.pieces.filter(
+      (piece) => piece.source.active && !piece.active && piece.team === state.cpuTeam,
+    );
+    const enemyDropped = sim.pieces.filter(
+      (piece) => piece.source.active && !piece.active && piece.team !== state.cpuTeam,
+    );
+
+    return {
+      pieces: sim.pieces,
+      bySource: sim.bySource,
+      actor: sim.bySource.get(shot.piece),
+      target: shot.target ? sim.bySource.get(shot.target) : null,
+      friendlyDropped,
+      enemyDropped,
+    };
+  }
+
+  function scoreStrongCpuSimulation(shot, result, usedPower) {
+    if (!result) return -Infinity;
+    let score = (shot.baseScore || 0) * 95;
+    const targetSource = shot.kind === "attack" ? shot.target : null;
+
+    result.enemyDropped.forEach((piece) => {
+      score += 980 + pieceValue(piece.source) * 1.55;
+      if (piece.size === "large" || piece.size === "huge") score += 820;
+      if (piece.source === targetSource) score += 360;
+    });
+
+    result.friendlyDropped.forEach((piece) => {
+      score -= 2800 + pieceValue(piece.source) * 2.25;
+      if (piece.source === shot.piece) score -= 950;
+      if (piece.size === "large" || piece.size === "huge") score -= 1350;
+    });
+
+    state.pieces.forEach((source) => {
+      if (!source.active) return;
+      const finalPiece = result.bySource.get(source);
+      if (!finalPiece || !finalPiece.active) return;
+      const initialEdge = edgePressure(source);
+      const finalEdge = edgePressure(finalPiece);
+      const edgeDelta = finalEdge - initialEdge;
+      const value = pieceValue(source);
+
+      if (source.team === state.cpuTeam) {
+        score -= Math.max(0, edgeDelta) * (230 + value * 0.45);
+        score += Math.max(0, -edgeDelta) * ((source.size === "large" || source.size === "huge") ? 520 : 150);
+        if (finalEdge > 0.7) score -= 260 + value * 0.55;
+        score += centerControlScore(finalPiece) * ((source.size === "large" || source.size === "huge") ? 48 : 18);
+      } else {
+        const sizeMultiplier = (source.size === "large" || source.size === "huge") ? 1.85 : 1;
+        score += Math.max(0, edgeDelta) * (250 + value * 0.75) * sizeMultiplier;
+        score -= Math.max(0, -edgeDelta) * 80;
+        if (finalEdge > 0.68) score += (source.size === "large" || source.size === "huge") ? 340 : 95;
+      }
+    });
+
+    if (shot.kind === "attack" && shot.target) {
+      const finalTarget = result.bySource.get(shot.target);
+      const initialTargetEdge = edgePressure(shot.target);
+      if (finalTarget && finalTarget.active) {
+        const finalTargetEdge = edgePressure(finalTarget);
+        score += Math.max(0, finalTargetEdge - initialTargetEdge) * 620;
+        if (shot.target.size === "large" || shot.target.size === "huge") {
+          score += Math.max(0, finalTargetEdge - initialTargetEdge) * 760;
+        }
+      }
+      if (initialTargetEdge > 0.36) {
+        score += Math.max(0, shot.pushAlignment || 0) * 290;
+        if ((shot.pushAlignment || 0) < 0.05) score -= 230;
+      }
+    }
+
+    if (shot.kind === "rescue" && result.actor?.active) {
+      score += Math.max(0, edgePressure(shot.piece) - edgePressure(result.actor)) * 760;
+    }
+
+    if (usedPower) score -= 95;
+    return score + Math.random() * 12;
+  }
+
+  function strongCpuPowerSamples(shot) {
+    if (shot.kind === "rescue") return [0.56, 0.7, 0.84];
+    if (shot.kind === "center") return [0.55, 0.72, 0.88];
+    if (shot.edge > 0.48 || shot.target?.size === "large" || shot.target?.size === "huge") {
+      return [0.68, 0.86, 1];
+    }
+    return [0.62, 0.78, 0.94];
+  }
+
+  function strongCpuAngleSamples(shot) {
+    const degrees = shot.kind === "attack" ? [-5, -2.5, 0, 2.5, 5] : [-4, 0, 4];
+    return degrees.map((degree) => (degree * Math.PI) / 180);
+  }
+
+  function evaluateStrongCpuTrial(shot, powerRatio, angleOffset, usedPower) {
+    const result = simulateStrongCpuShot(shot, powerRatio, angleOffset, usedPower);
+    return {
+      shot,
+      powerRatio,
+      angleOffset,
+      usedPower,
+      result,
+      score: scoreStrongCpuSimulation(shot, result, usedPower),
+    };
+  }
+
+  function chooseStrongCpuShot() {
+    const bases = buildStrongCpuBaseShots();
+    if (!bases.length) return null;
+
+    const canPower = (state.skillPoints[state.cpuTeam] || 0) >= SKILLS.power.cost;
+    const trials = [];
+    bases.forEach((shot, index) => {
+      strongCpuPowerSamples(shot).forEach((powerRatio) => {
+        strongCpuAngleSamples(shot).forEach((angleOffset) => {
+          trials.push(evaluateStrongCpuTrial(shot, powerRatio, angleOffset, false));
+          if (
+            canPower &&
+            shot.kind === "attack" &&
+            index < STRONG_CPU_POWER_BASE_LIMIT &&
+            powerRatio >= 0.78
+          ) {
+            trials.push(evaluateStrongCpuTrial(shot, Math.max(powerRatio, 0.9), angleOffset, true));
+          }
+        });
+      });
+    });
+
+    trials.sort((a, b) => b.score - a.score);
+    const best = trials[0];
+    if (!best || !Number.isFinite(best.score)) return null;
+
+    return {
+      ...best.shot,
+      powerRatio: best.powerRatio,
+      angleOffset: best.angleOffset,
+      wantsPower: best.usedPower,
+      strongScore: best.score,
+      selfDestructRisk: best.result?.friendlyDropped.length || 0,
+    };
+  }
+
   function cpuSafeAnchors(piece) {
     const midY = BOARD.y + BOARD.h / 2;
     const centerX = BOARD.x + BOARD.w / 2;
@@ -929,6 +1442,9 @@
   }
 
   function cpuPowerRatio(shot, usedPower) {
+    if (typeof shot?.powerRatio === "number") {
+      return clampNumber(shot.powerRatio, CPU_MIN_POWER, 1);
+    }
     const risky = hasFriendlyBeyondTarget(shot) || shotMayBounceBack(shot);
     let ratio;
 
@@ -951,7 +1467,39 @@
     return clampNumber(ratio, CPU_MIN_POWER, 1);
   }
 
+  function chooseStrongCpuGrowTarget() {
+    const growable = livePieces(state.cpuTeam).filter((piece) => piece.size !== "huge");
+    if (!growable.length) return null;
+
+    const opponentTeam = state.cpuTeam === "red" ? "green" : "red";
+    const enemies = livePieces(opponentTeam);
+    return growable
+      .map((piece) => {
+        const edge = edgePressure(piece);
+        const nextValue = pieceValue({ size: NEXT_SIZE[piece.size] });
+        const sizePlan = piece.size === "medium" ? 3.4 : piece.size === "large" ? 2.2 : 1.25;
+        const safety = (1 - edge) * 3.2;
+        const center = centerControlScore(piece) * 1.35;
+        const attackLane = enemies.reduce((best, enemy) => {
+          if (!isCpuLineClear(piece, enemy)) return best;
+          const dist = Math.hypot(enemy.x - piece.x, enemy.y - piece.y);
+          const enemyValue = pieceValue(enemy) / 520;
+          const edgeBonus = edgePressure(enemy) * 1.3;
+          return Math.max(best, enemyValue + edgeBonus + (1 - clampNumber(dist / 850, 0, 1)));
+        }, 0);
+        const dangerPenalty = edge > CPU_GROW_EDGE_THRESHOLD ? edge * 4.6 : edge * 1.1;
+        const valueGain = nextValue / 520;
+
+        return {
+          piece,
+          score: sizePlan + safety + center + attackLane + valueGain - dangerPenalty + Math.random() * 0.12,
+        };
+      })
+      .sort((a, b) => b.score - a.score)[0].piece;
+  }
+
   function chooseCpuGrowTarget() {
+    if (isStrongCpu()) return chooseStrongCpuGrowTarget();
     const growable = livePieces(state.cpuTeam).filter((piece) => piece.size !== "huge");
     if (!growable.length) return null;
     const priority = { medium: 0, large: 1, small: 1 };
@@ -1017,6 +1565,15 @@
     if (shot?.kind === "rescue") {
       return false;
     }
+    if (isStrongCpu()) {
+      if (!canUsePower || !shot?.wantsPower) return false;
+      state.skillPoints[state.cpuTeam] = Math.max(0, state.skillPoints[state.cpuTeam] - skill.cost);
+      addPowerBoost(state.cpuTeam);
+      showSkillAnnouncement(state.cpuTeam, skill.label, "この手番だけ威力アップ", CPU_POWER_ANNOUNCE_DELAY_MS);
+      setStatusText("CPUがPower発動");
+      updateSkillMeters();
+      return true;
+    }
     const reservePower = shouldReserveCpuPower(shot, points);
     let useChance = reservePower ? CPU_POWER_RESERVE_CHANCE : CPU_POWER_USE_CHANCE;
     if (points >= SKILLS.steal.cost && !chooseCpuGrowTarget()) {
@@ -1037,6 +1594,11 @@
   }
 
   function chooseCpuShot() {
+    if (isStrongCpu()) {
+      const strongShot = chooseStrongCpuShot();
+      if (strongShot) return strongShot;
+    }
+
     const own = livePieces(state.cpuTeam);
     const opponentTeam = state.cpuTeam === "red" ? "green" : "red";
     const enemies = livePieces(opponentTeam);
@@ -1115,7 +1677,8 @@
     }
     const usedPower = maybeUseCpuPower(shot);
     const ratio = cpuPowerRatio(shot, usedPower);
-    const angleOffset = cpuAngleErrorRadians(shot);
+    const angleOffset = typeof shot.angleOffset === "number" ? shot.angleOffset : cpuAngleErrorRadians(shot);
+    const aimTarget = shot.aimTarget || shot.target;
 
     const beginPreview = () => {
       state.cpuTimer = null;
@@ -1126,7 +1689,7 @@
       }
       state.cpuPreview = {
         piece: shot.piece,
-        target: shot.target,
+        target: aimTarget,
         power: ratio,
         angleOffset,
         powered: usedPower,
@@ -2039,7 +2602,8 @@
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointercancel", onPointerUp);
 
-    el.singleStartButton.addEventListener("click", () => startMatch("singlePlayer"));
+    el.singleStartButton.addEventListener("click", () => startMatch("singlePlayer", "weak"));
+    el.strongCpuStartButton.addEventListener("click", () => startMatch("singlePlayer", "strong"));
     el.twoPlayerStartButton.addEventListener("click", () => startMatch("twoPlayer"));
     el.tutorialButton.addEventListener("click", openTutorial);
     el.helpButton.addEventListener("click", openTutorial);
@@ -2048,9 +2612,9 @@
       setOverlay("pause");
     });
     el.resumeButton.addEventListener("click", () => setOverlay(null));
-    el.pauseRestartButton.addEventListener("click", () => startMatch(state.mode));
+    el.pauseRestartButton.addEventListener("click", () => startMatch(state.mode, state.cpuDifficulty));
     el.backToTitleButton.addEventListener("click", showTitle);
-    el.rematchButton.addEventListener("click", () => startMatch(state.mode));
+    el.rematchButton.addEventListener("click", () => startMatch(state.mode, state.cpuDifficulty));
     el.resultTitleButton.addEventListener("click", showTitle);
     el.soundToggle.addEventListener("change", () => {
       state.sound = el.soundToggle.checked;
