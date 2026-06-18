@@ -23,17 +23,20 @@
   const BUMPER_RESTITUTION = 0.94;
   const SETTLE_DELAY = 0.25;
   const STRIKER_ALONG_DAMPING = 0.5;
+  const SMALL_SPEED_MULTIPLIER = 0.9;
   const POWER_DRAG_MULTIPLIER = 1.5;
   const POWER_LAUNCH_MULTIPLIER = 1.25;
-  const CPU_POWER_USE_CHANCE = 0.5;
-  const CPU_ATTACK_POWER = 0.8;
-  const CPU_ATTACK_POWER_JITTER = 0.1;
-  const CPU_POWERED_MIN_POWER = 0.86;
-  const CPU_CENTER_POWER = 0.52;
-  const CPU_CENTER_POWER_JITTER = 0.12;
+  const CPU_POWER_USE_CHANCE = 0.72;
+  const CPU_POWER_USE_CHANCE_BANKED = 0.95;
+  const CPU_ATTACK_POWER = 0.9;
+  const CPU_ATTACK_POWER_JITTER = 0.08;
+  const CPU_POWERED_MIN_POWER = 0.95;
+  const CPU_CENTER_POWER = 0.62;
+  const CPU_CENTER_POWER_JITTER = 0.1;
   const CPU_ATTACK_MIN_ANGLE_ERROR = 1.1;
   const CPU_ATTACK_MAX_ANGLE_ERROR = 3.0;
   const CPU_CENTER_ANGLE_ERROR = 4.0;
+  const CPU_PREVIEW_DELAY_MS = 500;
 
   const COLORS = {
     red: {
@@ -198,6 +201,7 @@
     cpuTeam: "green",
     cpuThinking: false,
     cpuTimer: null,
+    cpuPreview: null,
     sound: true,
     skillPoints: {
       red: 0,
@@ -349,6 +353,7 @@
     state.mode = mode;
     state.cpuThinking = false;
     state.cpuTimer = null;
+    state.cpuPreview = null;
     state.selected = null;
     state.pointer = null;
     state.settleTime = 0;
@@ -689,9 +694,9 @@
     state.cpuThinking = true;
     updateHudForCpuThinking();
     state.cpuTimer = window.setTimeout(() => {
-      state.cpuThinking = false;
       state.cpuTimer = null;
       if (isCpuTurn()) runCpuTurn();
+      else state.cpuThinking = false;
     }, 720);
   }
 
@@ -767,12 +772,14 @@
 
   function maybeUseCpuPower(shot) {
     const skill = SKILLS.power;
+    const points = state.skillPoints[state.cpuTeam] || 0;
     const canUsePower =
       state.mode === "singlePlayer" &&
       state.turn === state.cpuTeam &&
-      state.skillPoints[state.cpuTeam] >= skill.cost;
-    const usefulShot = shot.kind === "attack" && shot.dist > 160;
-    if (!canUsePower || !usefulShot || Math.random() >= CPU_POWER_USE_CHANCE) {
+      points >= skill.cost;
+    const usefulShot = shot.kind === "attack" ? shot.dist > 120 : shot.dist > 260;
+    const useChance = points >= skill.cost * 2 ? CPU_POWER_USE_CHANCE_BANKED : CPU_POWER_USE_CHANCE;
+    if (!canUsePower || !usefulShot || Math.random() >= useChance) {
       return false;
     }
 
@@ -841,6 +848,7 @@
     const launchScale = (8.35 * LAUNCH_POWER * boost) / massSpeedOffset;
     piece.vx = ux * virtualDrag * launchScale;
     piece.vy = uy * virtualDrag * launchScale;
+    applyPieceSpeedTuning(piece);
     state.phase = "moving";
     state.settleTime = 0;
     playTone("launch", 0.85);
@@ -850,6 +858,8 @@
   function runCpuTurn() {
     const shot = chooseCpuShot();
     if (!shot) {
+      state.cpuThinking = false;
+      state.cpuPreview = null;
       finishTurn();
       return;
     }
@@ -860,7 +870,27 @@
     if (usedPower) {
       ratio = Math.max(ratio, CPU_POWERED_MIN_POWER);
     }
-    launchPieceToward(shot.piece, shot.target, ratio, cpuAngleErrorRadians(shot));
+    const angleOffset = cpuAngleErrorRadians(shot);
+    state.cpuPreview = {
+      piece: shot.piece,
+      target: shot.target,
+      power: ratio,
+      angleOffset,
+      powered: usedPower,
+    };
+    updateHudForCpuThinking();
+    state.cpuTimer = window.setTimeout(() => {
+      const preview = state.cpuPreview;
+      state.cpuTimer = null;
+      state.cpuPreview = null;
+      if (!preview || state.overlay || state.turn !== state.cpuTeam || state.phase !== "ready") {
+        state.cpuThinking = false;
+        updateHud();
+        return;
+      }
+      state.cpuThinking = false;
+      launchPieceToward(preview.piece, preview.target, preview.power, preview.angleOffset);
+    }, CPU_PREVIEW_DELAY_MS);
   }
 
   function findPieceAt(point, teamFilter = state.turn) {
@@ -937,6 +967,7 @@
     const launchScale = (8.35 * LAUNCH_POWER * boost) / massSpeedOffset;
     piece.vx = -drag.x * launchScale;
     piece.vy = -drag.y * launchScale;
+    applyPieceSpeedTuning(piece);
     state.selected = null;
     state.pointer = null;
     state.phase = "moving";
@@ -953,6 +984,12 @@
       piece.vx = 0;
       piece.vy = 0;
     }
+  }
+
+  function applyPieceSpeedTuning(piece) {
+    if (piece.size !== "small") return;
+    piece.vx *= SMALL_SPEED_MULTIPLIER;
+    piece.vy *= SMALL_SPEED_MULTIPLIER;
   }
 
   function softenStrikerBounce(piece, beforeVx, beforeVy) {
@@ -1008,6 +1045,8 @@
     b.vy += iy * invB;
     softenStrikerBounce(a, beforeA.vx, beforeA.vy);
     softenStrikerBounce(b, beforeB.vx, beforeB.vy);
+    applyPieceSpeedTuning(a);
+    applyPieceSpeedTuning(b);
 
     const impact = Math.abs(impulse);
     const now = performance.now();
@@ -1443,6 +1482,56 @@
     ctx.restore();
   }
 
+  function drawCpuPreview() {
+    const preview = state.cpuPreview;
+    if (!preview || !preview.piece || !preview.piece.active) return;
+
+    const piece = preview.piece;
+    const dx = preview.target.x - piece.x;
+    const dy = preview.target.y - piece.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const baseUx = dx / dist;
+    const baseUy = dy / dist;
+    const cos = Math.cos(preview.angleOffset);
+    const sin = Math.sin(preview.angleOffset);
+    const ux = baseUx * cos - baseUy * sin;
+    const uy = baseUx * sin + baseUy * cos;
+    const power = clampNumber(preview.power, 0.2, 1);
+    const startX = piece.x + ux * (piece.r + 12);
+    const startY = piece.y + uy * (piece.r + 12);
+    const endX = piece.x + ux * (piece.r + 32 + power * 150);
+    const endY = piece.y + uy * (piece.r + 32 + power * 150);
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.strokeStyle = preview.powered ? "rgba(255, 224, 109, 0.95)" : "#80f0bc";
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.shadowColor = preview.powered ? "rgba(255, 224, 109, 0.5)" : "rgba(128, 240, 188, 0.42)";
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = preview.powered ? 10 : 8;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(endX - ux * 30 + -uy * 13, endY - uy * 30 + ux * 13);
+    ctx.lineTo(endX - ux * 30 - -uy * 13, endY - uy * 30 - ux * 13);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.38)";
+    ctx.lineWidth = 3;
+    for (let i = 1; i <= 3; i += 1) {
+      ctx.beginPath();
+      ctx.arc(piece.x, piece.y, piece.r + i * 15 + power * 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawEffects() {
     state.effects.forEach((effect) => {
       const t = effect.age / effect.life;
@@ -1508,6 +1597,7 @@
     }
 
     drawAim();
+    drawCpuPreview();
     drawEffects();
   }
 
