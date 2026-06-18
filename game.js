@@ -52,11 +52,13 @@
   const CPU_GROW_EDGE_THRESHOLD = 0.54;
   const CPU_RESCUE_EDGE_THRESHOLD = 0.58;
   const CPU_RESCUE_CHANCE = 0.62;
-  const STRONG_CPU_BASE_LIMIT = 14;
-  const STRONG_CPU_POWER_BASE_LIMIT = 6;
-  const STRONG_CPU_SIM_TIME = 2.25;
-  const STRONG_CPU_SIM_DT = 1 / 75;
-  const STRONG_CPU_SIM_SETTLE = 0.26;
+  const STRONG_CPU_BASE_LIMIT = 6;
+  const STRONG_CPU_SUPPORT_LIMIT = 3;
+  const STRONG_CPU_POWER_BASE_LIMIT = 3;
+  const STRONG_CPU_MAX_TRIALS = 48;
+  const STRONG_CPU_SIM_TIME = 1.05;
+  const STRONG_CPU_SIM_DT = 1 / 36;
+  const STRONG_CPU_SIM_SETTLE = 0.14;
   const RESULT_DELAY_MS = 1000;
 
   const COLORS = {
@@ -1031,7 +1033,7 @@
 
     attacks.sort((a, b) => b.baseScore - a.baseScore);
     support.sort((a, b) => b.baseScore - a.baseScore);
-    return [...support.slice(0, 5), ...attacks.slice(0, STRONG_CPU_BASE_LIMIT)];
+    return [...support.slice(0, STRONG_CPU_SUPPORT_LIMIT), ...attacks.slice(0, STRONG_CPU_BASE_LIMIT)];
   }
 
   function clonePiecesForSimulation() {
@@ -1193,7 +1195,7 @@
         applySimDamping(piece, STRONG_CPU_SIM_DT);
       });
 
-      for (let iteration = 0; iteration < 2; iteration += 1) {
+      for (let iteration = 0; iteration < 1; iteration += 1) {
         for (let i = 0; i < active.length; i += 1) {
           for (let j = i + 1; j < active.length; j += 1) {
             if (active[i].active && active[j].active) collideSimPieces(active[i], active[j]);
@@ -1301,16 +1303,16 @@
   }
 
   function strongCpuPowerSamples(shot) {
-    if (shot.kind === "rescue") return [0.56, 0.7, 0.84];
-    if (shot.kind === "center") return [0.55, 0.72, 0.88];
+    if (shot.kind === "rescue") return [0.72];
+    if (shot.kind === "center") return [0.76];
     if (shot.edge > 0.48 || shot.target?.size === "large" || shot.target?.size === "huge") {
-      return [0.68, 0.86, 1];
+      return [0.78, 0.96];
     }
-    return [0.62, 0.78, 0.94];
+    return [0.7, 0.88];
   }
 
   function strongCpuAngleSamples(shot) {
-    const degrees = shot.kind === "attack" ? [-5, -2.5, 0, 2.5, 5] : [-4, 0, 4];
+    const degrees = shot.kind === "attack" ? [-3.5, 0, 3.5] : [0];
     return degrees.map((degree) => (degree * Math.PI) / 180);
   }
 
@@ -1332,9 +1334,10 @@
 
     const canPower = (state.skillPoints[state.cpuTeam] || 0) >= SKILLS.power.cost;
     const trials = [];
-    bases.forEach((shot, index) => {
+    bases.some((shot, index) => {
       strongCpuPowerSamples(shot).forEach((powerRatio) => {
         strongCpuAngleSamples(shot).forEach((angleOffset) => {
+          if (trials.length >= STRONG_CPU_MAX_TRIALS) return;
           trials.push(evaluateStrongCpuTrial(shot, powerRatio, angleOffset, false));
           if (
             canPower &&
@@ -1342,10 +1345,12 @@
             index < STRONG_CPU_POWER_BASE_LIMIT &&
             powerRatio >= 0.78
           ) {
+            if (trials.length >= STRONG_CPU_MAX_TRIALS) return;
             trials.push(evaluateStrongCpuTrial(shot, Math.max(powerRatio, 0.9), angleOffset, true));
           }
         });
       });
+      return trials.length >= STRONG_CPU_MAX_TRIALS;
     });
 
     trials.sort((a, b) => b.score - a.score);
@@ -2603,7 +2608,7 @@
     canvas.addEventListener("pointercancel", onPointerUp);
 
     el.singleStartButton.addEventListener("click", () => startMatch("singlePlayer", "weak"));
-    el.strongCpuStartButton.addEventListener("click", () => startMatch("singlePlayer", "strong"));
+    el.strongCpuStartButton?.addEventListener("click", () => startMatch("singlePlayer", "strong"));
     el.twoPlayerStartButton.addEventListener("click", () => startMatch("twoPlayer"));
     el.tutorialButton.addEventListener("click", openTutorial);
     el.helpButton.addEventListener("click", openTutorial);
