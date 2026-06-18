@@ -26,9 +26,10 @@
   const SMALL_SPEED_MULTIPLIER = 0.9;
   const POWER_DRAG_MULTIPLIER = 1.5;
   const POWER_LAUNCH_MULTIPLIER = 1.25;
-  const CPU_POWER_USE_CHANCE = 0.88;
-  const CPU_POWER_USE_CHANCE_BANKED = 0.95;
+  const CPU_POWER_USE_CHANCE = 0.58;
+  const CPU_POWER_USE_CHANCE_BANKED = 0.82;
   const CPU_POWER_USE_CHANCE_MAXED = 1;
+  const CPU_POWER_RESERVE_CHANCE = 0.18;
   const CPU_ATTACK_POWER_MIN = 0.84;
   const CPU_ATTACK_POWER_MAX = 1;
   const CPU_RISKY_ATTACK_POWER_MIN = 0.55;
@@ -273,54 +274,36 @@
 
   function makeWoodPattern() {
     const offscreen = document.createElement("canvas");
-    offscreen.width = 1200;
-    offscreen.height = 1500;
+    offscreen.width = 360;
+    offscreen.height = 360;
     const g = offscreen.getContext("2d");
-    const base = g.createLinearGradient(0, 0, offscreen.width, offscreen.height);
-    base.addColorStop(0, "#b97632");
-    base.addColorStop(0.34, "#d89b4c");
-    base.addColorStop(0.68, "#bc7d35");
-    base.addColorStop(1, "#e8bd67");
-    g.fillStyle = base;
-    g.fillRect(0, 0, offscreen.width, offscreen.height);
+    const gradient = g.createLinearGradient(0, 0, 360, 0);
+    gradient.addColorStop(0, "#b97731");
+    gradient.addColorStop(0.35, "#dda85a");
+    gradient.addColorStop(0.72, "#c4863d");
+    gradient.addColorStop(1, "#f0c878");
+    g.fillStyle = gradient;
+    g.fillRect(0, 0, 360, 360);
 
-    let x = -28;
-    let plank = 0;
-    while (x < offscreen.width + 40) {
-      const width = 56 + ((plank * 37) % 46);
-      const shade = plank % 3 === 0 ? "rgba(255, 231, 164, 0.18)" : "rgba(83, 48, 20, 0.1)";
-      g.fillStyle = shade;
-      g.fillRect(x, 0, width, offscreen.height);
-      g.strokeStyle = "rgba(66, 38, 17, 0.16)";
-      g.lineWidth = 3;
+    for (let x = -20; x < 390; x += 18) {
+      const alpha = 0.12 + ((x * 13) % 9) / 100;
+      g.strokeStyle = `rgba(70, 38, 15, ${alpha})`;
+      g.lineWidth = 2 + ((x * 7) % 4);
       g.beginPath();
-      g.moveTo(x + width, 0);
-      g.lineTo(x + width, offscreen.height);
-      g.stroke();
-
-      for (let line = 0; line < 5; line += 1) {
-        const offset = ((line * 19 + plank * 23) % Math.max(12, width - 8)) + 4;
-        const alpha = 0.08 + ((line + plank) % 4) * 0.025;
-        g.strokeStyle = `rgba(70, 38, 15, ${alpha})`;
-        g.lineWidth = 1.4 + ((line + plank) % 3) * 0.7;
-        g.beginPath();
-        g.moveTo(x + offset, 0);
-        for (let y = 0; y <= offscreen.height; y += 44) {
-          g.lineTo(x + offset + Math.sin(y * 0.02 + plank * 0.8 + line) * 9, y);
-        }
-        g.stroke();
+      g.moveTo(x, 0);
+      for (let y = 0; y <= 360; y += 36) {
+        g.lineTo(x + Math.sin(y * 0.035 + x) * 8, y);
       }
-      x += width;
-      plank += 1;
+      g.stroke();
     }
 
-    for (let i = 0; i < 90; i += 1) {
-      const knotX = (i * 137) % offscreen.width;
-      const knotY = (i * 211) % offscreen.height;
-      g.strokeStyle = "rgba(81, 48, 22, 0.13)";
-      g.lineWidth = 1.4;
+    for (let i = 0; i < 36; i += 1) {
+      const x = (i * 71) % 360;
+      const y = (i * 47) % 360;
+      g.strokeStyle = "rgba(85, 49, 22, 0.14)";
+      g.lineWidth = 1.5;
       g.beginPath();
-      g.ellipse(knotX, knotY, 34 + (i % 4) * 5, 9 + (i % 3) * 2, (i % 6) * 0.55, 0, Math.PI * 2);
+      g.ellipse(x, y, 26, 8, (i % 5) * 0.7, 0, Math.PI * 2);
       g.stroke();
     }
 
@@ -891,6 +874,55 @@
     return clampNumber(ratio, CPU_MIN_POWER, 1);
   }
 
+  function chooseCpuGrowTarget() {
+    const growable = livePieces(state.cpuTeam).filter((piece) => piece.size !== "huge");
+    if (!growable.length) return null;
+    const priority = { medium: 0, large: 1, small: 1 };
+    return growable
+      .map((piece) => ({
+        piece,
+        score: priority[piece.size] ?? 2,
+        noise: Math.random(),
+      }))
+      .sort((a, b) => a.score - b.score || a.noise - b.noise)[0].piece;
+  }
+
+  function maybeUseCpuGrow() {
+    const skill = SKILLS.grow;
+    if (
+      state.mode !== "singlePlayer" ||
+      state.turn !== state.cpuTeam
+    ) {
+      return false;
+    }
+
+    let usedGrow = false;
+    while ((state.skillPoints[state.cpuTeam] || 0) >= skill.cost) {
+      const target = chooseCpuGrowTarget();
+      if (!target) break;
+      state.skillPoints[state.cpuTeam] = Math.max(
+        0,
+        (state.skillPoints[state.cpuTeam] || 0) - skill.cost,
+      );
+      growPiece(target);
+      usedGrow = true;
+    }
+
+    if (!usedGrow) return false;
+    showSkillAnnouncement(state.cpuTeam, skill.label, "自分のコマを1個サイズアップ", 1400);
+    setStatusText("CPUがGrow発動");
+    updateSkillMeters();
+    return true;
+  }
+
+  function shouldReserveCpuPower(shot, points) {
+    const growCost = SKILLS.grow.cost;
+    if (chooseCpuGrowTarget() && points < growCost && growCost - points <= 4) {
+      return true;
+    }
+    return shot?.kind === "attack" && shot.dist < 260 && points < growCost;
+  }
+
   function maybeUseCpuPower(shot) {
     const skill = SKILLS.power;
     const points = state.skillPoints[state.cpuTeam] || 0;
@@ -898,10 +930,11 @@
       state.mode === "singlePlayer" &&
       state.turn === state.cpuTeam &&
       points >= skill.cost;
-    let useChance = CPU_POWER_USE_CHANCE;
-    if (points >= SKILLS.steal.cost) {
+    const reservePower = shouldReserveCpuPower(shot, points);
+    let useChance = reservePower ? CPU_POWER_RESERVE_CHANCE : CPU_POWER_USE_CHANCE;
+    if (points >= SKILLS.steal.cost && !chooseCpuGrowTarget()) {
       useChance = CPU_POWER_USE_CHANCE_MAXED;
-    } else if (points >= skill.cost * 2) {
+    } else if (!reservePower && points >= skill.cost * 2) {
       useChance = CPU_POWER_USE_CHANCE_BANKED;
     }
     if (!canUsePower || !shot || Math.random() >= useChance) {
@@ -983,6 +1016,7 @@
   }
 
   function runCpuTurn() {
+    maybeUseCpuGrow();
     const shot = chooseCpuShot();
     if (!shot) {
       state.cpuThinking = false;
@@ -1385,38 +1419,39 @@
     ctx.fillRect(24, 24, VIEW_W - 48, VIEW_H - 48);
     ctx.restore();
 
-    ctx.save();
     roundedRect(ctx, DROP_BOUNDS.x, DROP_BOUNDS.y, DROP_BOUNDS.w, DROP_BOUNDS.h, 12);
-    ctx.clip();
-    const dropGradient = ctx.createLinearGradient(DROP_BOUNDS.x, DROP_BOUNDS.y, DROP_BOUNDS.x, DROP_BOUNDS.y + DROP_BOUNDS.h);
-    dropGradient.addColorStop(0, "rgba(232, 228, 206, 0.24)");
-    dropGradient.addColorStop(0.5, "rgba(50, 45, 36, 0.2)");
-    dropGradient.addColorStop(1, "rgba(232, 228, 206, 0.2)");
-    ctx.fillStyle = dropGradient;
-    ctx.fillRect(DROP_BOUNDS.x, DROP_BOUNDS.y, DROP_BOUNDS.w, DROP_BOUNDS.h);
-    ctx.strokeStyle = "rgba(255, 247, 224, 0.12)";
-    ctx.lineWidth = 3;
-    for (let x = DROP_BOUNDS.x - DROP_BOUNDS.h; x < DROP_BOUNDS.x + DROP_BOUNDS.w; x += 44) {
-      ctx.beginPath();
-      ctx.moveTo(x, DROP_BOUNDS.y + DROP_BOUNDS.h);
-      ctx.lineTo(x + DROP_BOUNDS.h, DROP_BOUNDS.y);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    roundedRect(ctx, DROP_BOUNDS.x, DROP_BOUNDS.y, DROP_BOUNDS.w, DROP_BOUNDS.h, 12);
+    ctx.fillStyle = "rgba(72, 42, 18, 0.14)";
+    ctx.fill();
     ctx.lineWidth = 6;
-    ctx.strokeStyle = "rgba(32, 29, 24, 0.92)";
+    ctx.strokeStyle = "rgba(36, 22, 12, 0.92)";
     ctx.stroke();
+
+    ctx.save();
+    ctx.fillStyle = "rgba(18, 20, 17, 0.2)";
+    const dropBands = [
+      { x: DROP_BOUNDS.x, y: DROP_BOUNDS.y, w: DROP_BOUNDS.w, h: BOARD.y - DROP_BOUNDS.y },
+      {
+        x: DROP_BOUNDS.x,
+        y: BOARD.y + BOARD.h,
+        w: DROP_BOUNDS.w,
+        h: DROP_BOUNDS.y + DROP_BOUNDS.h - (BOARD.y + BOARD.h),
+      },
+      { x: DROP_BOUNDS.x, y: BOARD.y, w: BOARD.x - DROP_BOUNDS.x, h: BOARD.h },
+      {
+        x: BOARD.x + BOARD.w,
+        y: BOARD.y,
+        w: DROP_BOUNDS.x + DROP_BOUNDS.w - (BOARD.x + BOARD.w),
+        h: BOARD.h,
+      },
+    ];
+    dropBands.forEach((band) => ctx.fillRect(band.x, band.y, band.w, band.h));
+    ctx.restore();
 
     roundedRect(ctx, BOARD.x, BOARD.y, BOARD.w, BOARD.h, 8);
     ctx.fillStyle = "rgba(255, 223, 155, 0.18)";
     ctx.fill();
     ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(255, 246, 218, 0.62)";
-    ctx.stroke();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(42, 26, 14, 0.86)";
+    ctx.strokeStyle = "rgba(48, 28, 13, 0.78)";
     ctx.stroke();
 
     drawGrid();
