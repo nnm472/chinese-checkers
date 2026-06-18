@@ -25,6 +25,15 @@
   const STRIKER_ALONG_DAMPING = 0.5;
   const POWER_DRAG_MULTIPLIER = 1.5;
   const POWER_LAUNCH_MULTIPLIER = 1.25;
+  const CPU_POWER_USE_CHANCE = 0.5;
+  const CPU_ATTACK_POWER = 0.8;
+  const CPU_ATTACK_POWER_JITTER = 0.1;
+  const CPU_POWERED_MIN_POWER = 0.86;
+  const CPU_CENTER_POWER = 0.52;
+  const CPU_CENTER_POWER_JITTER = 0.12;
+  const CPU_ATTACK_MIN_ANGLE_ERROR = 1.1;
+  const CPU_ATTACK_MAX_ANGLE_ERROR = 3.0;
+  const CPU_CENTER_ANGLE_ERROR = 4.0;
 
   const COLORS = {
     red: {
@@ -304,6 +313,7 @@
       mass: data.mass,
       active: true,
       angle: (x + y) * 0.01,
+      maxMark: size === "huge",
     };
   }
 
@@ -477,6 +487,10 @@
       setStatusText(`${skill.label}は準備中`);
       return;
     }
+    if (skillKey === "grow" && !livePieces(team).some((piece) => piece.size !== "huge")) {
+      setStatusText("Growできるコマがありません");
+      return;
+    }
 
     consumeSkillPoints(team, skill.cost);
 
@@ -513,8 +527,28 @@
   }
 
   function growPiece(piece) {
+    if (piece.size === "huge") {
+      piece.maxMark = true;
+      state.effects.push({
+        kind: "grow",
+        x: piece.x,
+        y: piece.y,
+        team: piece.team,
+        age: 0,
+        life: 0.32,
+        r: piece.r,
+      });
+      playTone("select", 0.7);
+      updateHud();
+      setStatusText("このコマは最大です");
+      return false;
+    }
+
     const nextSize = NEXT_SIZE[piece.size];
     resizePiece(piece, nextSize);
+    if (piece.size === "huge") {
+      piece.maxMark = true;
+    }
     state.effects.push({
       kind: "grow",
       x: piece.x,
@@ -528,6 +562,7 @@
     state.phase = "ready";
     playTone("select", 1);
     updateHud();
+    return true;
   }
 
   function stealPiece(piece, team) {
@@ -711,6 +746,44 @@
     return !BUMPERS.some((bumper) => segmentNearRect(start, end, bumper, piece.r + 8));
   }
 
+  function clampNumber(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function randomRange(min, max) {
+    return min + Math.random() * (max - min);
+  }
+
+  function cpuAngleErrorRadians(shot) {
+    if (shot.kind !== "attack") {
+      return (randomRange(-CPU_CENTER_ANGLE_ERROR, CPU_CENTER_ANGLE_ERROR) * Math.PI) / 180;
+    }
+    const farRatio = clampNumber(shot.dist / 820, 0, 1);
+    const errorDegrees =
+      CPU_ATTACK_MAX_ANGLE_ERROR -
+      (CPU_ATTACK_MAX_ANGLE_ERROR - CPU_ATTACK_MIN_ANGLE_ERROR) * farRatio;
+    return (randomRange(-errorDegrees, errorDegrees) * Math.PI) / 180;
+  }
+
+  function maybeUseCpuPower(shot) {
+    const skill = SKILLS.power;
+    const canUsePower =
+      state.mode === "singlePlayer" &&
+      state.turn === state.cpuTeam &&
+      state.skillPoints[state.cpuTeam] >= skill.cost;
+    const usefulShot = shot.kind === "attack" && shot.dist > 160;
+    if (!canUsePower || !usefulShot || Math.random() >= CPU_POWER_USE_CHANCE) {
+      return false;
+    }
+
+    state.skillPoints[state.cpuTeam] = Math.max(0, state.skillPoints[state.cpuTeam] - skill.cost);
+    state.powerBoostTeam = state.cpuTeam;
+    showSkillAnnouncement(state.cpuTeam, skill.label, "CPUがこの手番だけ威力アップ", 1200);
+    setStatusText("CPUがPower発動");
+    updateSkillMeters();
+    return true;
+  }
+
   function chooseCpuShot() {
     const own = livePieces(state.cpuTeam);
     const opponentTeam = state.cpuTeam === "red" ? "green" : "red";
@@ -751,15 +824,21 @@
     };
   }
 
-  function launchPieceToward(piece, target, powerRatio) {
+  function launchPieceToward(piece, target, powerRatio, angleOffset = 0) {
     const dx = target.x - piece.x;
     const dy = target.y - piece.y;
     const dist = Math.hypot(dx, dy) || 1;
-    const ux = dx / dist;
-    const uy = dy / dist;
+    const baseUx = dx / dist;
+    const baseUy = dy / dist;
+    const cos = Math.cos(angleOffset);
+    const sin = Math.sin(angleOffset);
+    const ux = baseUx * cos - baseUy * sin;
+    const uy = baseUx * sin + baseUy * cos;
     const massSpeedOffset = 0.84 + piece.mass * 0.07;
-    const virtualDrag = Math.min(getMaxDrag(piece) * powerRatio, dist * 0.55);
-    const launchScale = (8.35 * LAUNCH_POWER) / massSpeedOffset;
+    const clampedPower = clampNumber(powerRatio, 0.2, 1);
+    const virtualDrag = Math.min(getMaxDrag(piece) * clampedPower, dist * 0.55);
+    const boost = state.powerBoostTeam === piece.team ? POWER_LAUNCH_MULTIPLIER : 1;
+    const launchScale = (8.35 * LAUNCH_POWER * boost) / massSpeedOffset;
     piece.vx = ux * virtualDrag * launchScale;
     piece.vy = uy * virtualDrag * launchScale;
     state.phase = "moving";
@@ -774,8 +853,14 @@
       finishTurn();
       return;
     }
-    const ratio = shot.kind === "attack" ? 0.78 : 0.45;
-    launchPieceToward(shot.piece, shot.target, ratio);
+    const usedPower = maybeUseCpuPower(shot);
+    const basePower = shot.kind === "attack" ? CPU_ATTACK_POWER : CPU_CENTER_POWER;
+    const jitter = shot.kind === "attack" ? CPU_ATTACK_POWER_JITTER : CPU_CENTER_POWER_JITTER;
+    let ratio = randomRange(basePower - jitter, basePower + jitter);
+    if (usedPower) {
+      ratio = Math.max(ratio, CPU_POWERED_MIN_POWER);
+    }
+    launchPieceToward(shot.piece, shot.target, ratio, cpuAngleErrorRadians(shot));
   }
 
   function findPieceAt(point, teamFilter = state.turn) {
@@ -1220,6 +1305,26 @@
     ctx.lineWidth = Math.max(2, piece.r * 0.12);
     ctx.strokeStyle = "rgba(255, 255, 255, 0.58)";
     ctx.stroke();
+
+    if (piece.maxMark) {
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.setLineDash([piece.r * 0.26, piece.r * 0.16]);
+      ctx.lineWidth = Math.max(2, piece.r * 0.055);
+      ctx.strokeStyle = "rgba(255, 224, 109, 0.92)";
+      ctx.beginPath();
+      ctx.arc(0, 0, piece.r * 0.78, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(255, 246, 190, 0.88)";
+      for (let i = 0; i < 6; i += 1) {
+        const angle = (Math.PI * 2 * i) / 6;
+        ctx.beginPath();
+        ctx.arc(Math.cos(angle) * piece.r * 0.56, Math.sin(angle) * piece.r * 0.56, piece.r * 0.055, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
 
     ctx.beginPath();
     ctx.arc(-piece.r * 0.28, -piece.r * 0.38, piece.r * 0.22, 0, Math.PI * 2);
