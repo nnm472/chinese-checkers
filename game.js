@@ -37,16 +37,21 @@
   const CPU_POWERED_MIN_POWER = 0.95;
   const CPU_CENTER_POWER_MIN = 0.9;
   const CPU_CENTER_POWER_MAX = 1;
+  const CPU_RESCUE_POWER_MIN = 0.72;
+  const CPU_RESCUE_POWER_MAX = 0.86;
   const CPU_MIN_POWER = 0.5;
   const CPU_ATTACK_MIN_ANGLE_ERROR = 1.1;
   const CPU_ATTACK_MAX_ANGLE_ERROR = 3.0;
   const CPU_CENTER_ANGLE_ERROR = 4.0;
+  const CPU_RESCUE_ANGLE_ERROR = 2.0;
   const CPU_PREVIEW_DELAY_MS = 500;
   const CPU_POWER_ANNOUNCE_DELAY_MS = 1800;
   const CPU_POWER_PREVIEW_GAP_MS = 120;
   const CPU_TARGET_RANDOMNESS = 0.72;
   const CPU_EDGE_TARGET_MAX_DIST = 520;
   const CPU_GROW_EDGE_THRESHOLD = 0.54;
+  const CPU_RESCUE_EDGE_THRESHOLD = 0.58;
+  const CPU_RESCUE_CHANCE = 0.62;
   const RESULT_DELAY_MS = 1000;
 
   const COLORS = {
@@ -338,7 +343,6 @@
       mass: data.mass,
       active: true,
       angle: (x + y) * 0.01,
-      maxMark: size === "huge",
     };
   }
 
@@ -578,7 +582,6 @@
 
   function growPiece(piece) {
     if (piece.size === "huge") {
-      piece.maxMark = true;
       state.effects.push({
         kind: "grow",
         x: piece.x,
@@ -596,9 +599,6 @@
 
     const nextSize = NEXT_SIZE[piece.size];
     resizePiece(piece, nextSize);
-    if (piece.size === "huge") {
-      piece.maxMark = true;
-    }
     state.effects.push({
       kind: "grow",
       x: piece.x,
@@ -807,6 +807,9 @@
   }
 
   function cpuAngleErrorRadians(shot) {
+    if (shot.kind === "rescue") {
+      return (randomRange(-CPU_RESCUE_ANGLE_ERROR, CPU_RESCUE_ANGLE_ERROR) * Math.PI) / 180;
+    }
     if (shot.kind !== "attack") {
       return (randomRange(-CPU_CENTER_ANGLE_ERROR, CPU_CENTER_ANGLE_ERROR) * Math.PI) / 180;
     }
@@ -844,6 +847,61 @@
     );
   }
 
+  function cpuSafeAnchors(piece) {
+    const midY = BOARD.y + BOARD.h / 2;
+    const centerX = BOARD.x + BOARD.w / 2;
+    const side = piece.team === "green" ? -1 : 1;
+    const safeY = midY + side * 116;
+    const innerY = midY + side * 72;
+    return [
+      { x: centerX, y: safeY, cover: 1.15 },
+      { x: BUMPERS[0].x + BUMPERS[0].w / 2, y: safeY, cover: 1 },
+      { x: BUMPERS[1].x + BUMPERS[1].w / 2, y: safeY, cover: 1 },
+      { x: centerX, y: innerY, cover: 0.55 },
+      { x: centerX, y: midY, cover: 0.25 },
+    ];
+  }
+
+  function cpuRescueScore(piece, target, dist) {
+    const midY = BOARD.y + BOARD.h / 2;
+    const centerX = BOARD.x + BOARD.w / 2;
+    const centerDist = Math.hypot(target.x - centerX, target.y - midY);
+    const centerScore = 1 - clampNumber(centerDist / 520, 0, 1);
+    const edgeSafety = 1 - edgePressure(target);
+    const moveEnough = clampNumber(dist / 420, 0, 1);
+    return (
+      edgeSafety * 2.25 +
+      centerScore * 1.15 +
+      (target.cover || 0) +
+      moveEnough * 0.35 -
+      dist / 1600 +
+      Math.random() * 0.12
+    );
+  }
+
+  function chooseCpuRescueShot() {
+    if (Math.random() >= CPU_RESCUE_CHANCE) return null;
+    const endangered = livePieces(state.cpuTeam)
+      .filter((piece) => (piece.size === "large" || piece.size === "huge") && edgePressure(piece) >= CPU_RESCUE_EDGE_THRESHOLD)
+      .sort((a, b) => edgePressure(b) - edgePressure(a));
+
+    for (const piece of endangered) {
+      const anchors = cpuSafeAnchors(piece)
+        .map((target) => ({
+          piece,
+          target,
+          dist: Math.hypot(target.x - piece.x, target.y - piece.y),
+          kind: "rescue",
+        }))
+        .filter((shot) => shot.dist > 80 && isCpuLineClear(piece, shot.target))
+        .map((shot) => ({ ...shot, score: cpuRescueScore(piece, shot.target, shot.dist) }))
+        .sort((a, b) => b.score - a.score);
+      if (anchors.length) return anchors[0];
+    }
+
+    return null;
+  }
+
   function hasFriendlyBeyondTarget(shot) {
     if (shot.kind !== "attack") return false;
     const { piece, target, dist } = shot;
@@ -872,7 +930,9 @@
     const risky = hasFriendlyBeyondTarget(shot) || shotMayBounceBack(shot);
     let ratio;
 
-    if (shot.kind !== "attack") {
+    if (shot.kind === "rescue") {
+      ratio = randomRange(CPU_RESCUE_POWER_MIN, CPU_RESCUE_POWER_MAX);
+    } else if (shot.kind !== "attack") {
       ratio = randomRange(CPU_CENTER_POWER_MIN, CPU_CENTER_POWER_MAX);
     } else if (risky) {
       ratio = randomRange(CPU_RISKY_ATTACK_POWER_MIN, CPU_RISKY_ATTACK_POWER_MAX);
@@ -952,6 +1012,9 @@
       state.mode === "singlePlayer" &&
       state.turn === state.cpuTeam &&
       points >= skill.cost;
+    if (shot?.kind === "rescue") {
+      return false;
+    }
     const reservePower = shouldReserveCpuPower(shot, points);
     let useChance = reservePower ? CPU_POWER_RESERVE_CHANCE : CPU_POWER_USE_CHANCE;
     if (points >= SKILLS.steal.cost && !chooseCpuGrowTarget()) {
@@ -976,6 +1039,8 @@
     const opponentTeam = state.cpuTeam === "red" ? "green" : "red";
     const enemies = livePieces(opponentTeam);
     const candidates = [];
+    const rescue = chooseCpuRescueShot();
+    if (rescue) return rescue;
 
     own.forEach((piece) => {
       enemies.forEach((target) => {
@@ -1441,33 +1506,45 @@
     ctx.fillRect(24, 24, VIEW_W - 48, VIEW_H - 48);
     ctx.restore();
 
+    ctx.save();
+    roundedRect(ctx, 24, 24, VIEW_W - 48, VIEW_H - 48, 26);
+    ctx.clip();
+    ctx.fillStyle = "rgba(24, 27, 25, 0.58)";
+    const outerBands = [
+      { x: 24, y: 24, w: VIEW_W - 48, h: DROP_BOUNDS.y - 24 },
+      {
+        x: 24,
+        y: DROP_BOUNDS.y + DROP_BOUNDS.h,
+        w: VIEW_W - 48,
+        h: VIEW_H - 24 - (DROP_BOUNDS.y + DROP_BOUNDS.h),
+      },
+      { x: 24, y: DROP_BOUNDS.y, w: DROP_BOUNDS.x - 24, h: DROP_BOUNDS.h },
+      {
+        x: DROP_BOUNDS.x + DROP_BOUNDS.w,
+        y: DROP_BOUNDS.y,
+        w: VIEW_W - 24 - (DROP_BOUNDS.x + DROP_BOUNDS.w),
+        h: DROP_BOUNDS.h,
+      },
+    ];
+    outerBands.forEach((band) => ctx.fillRect(band.x, band.y, band.w, band.h));
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.lineWidth = 2;
+    for (let y = 42; y < VIEW_H - 42; y += 34) {
+      ctx.beginPath();
+      ctx.moveTo(26, y);
+      ctx.lineTo(DROP_BOUNDS.x - 2, y + 10);
+      ctx.moveTo(DROP_BOUNDS.x + DROP_BOUNDS.w + 2, y + 8);
+      ctx.lineTo(VIEW_W - 26, y - 4);
+      ctx.stroke();
+    }
+    ctx.restore();
+
     roundedRect(ctx, DROP_BOUNDS.x, DROP_BOUNDS.y, DROP_BOUNDS.w, DROP_BOUNDS.h, 12);
     ctx.fillStyle = "rgba(72, 42, 18, 0.14)";
     ctx.fill();
     ctx.lineWidth = 6;
     ctx.strokeStyle = "rgba(36, 22, 12, 0.92)";
     ctx.stroke();
-
-    ctx.save();
-    ctx.fillStyle = "rgba(18, 20, 17, 0.2)";
-    const dropBands = [
-      { x: DROP_BOUNDS.x, y: DROP_BOUNDS.y, w: DROP_BOUNDS.w, h: BOARD.y - DROP_BOUNDS.y },
-      {
-        x: DROP_BOUNDS.x,
-        y: BOARD.y + BOARD.h,
-        w: DROP_BOUNDS.w,
-        h: DROP_BOUNDS.y + DROP_BOUNDS.h - (BOARD.y + BOARD.h),
-      },
-      { x: DROP_BOUNDS.x, y: BOARD.y, w: BOARD.x - DROP_BOUNDS.x, h: BOARD.h },
-      {
-        x: BOARD.x + BOARD.w,
-        y: BOARD.y,
-        w: DROP_BOUNDS.x + DROP_BOUNDS.w - (BOARD.x + BOARD.w),
-        h: BOARD.h,
-      },
-    ];
-    dropBands.forEach((band) => ctx.fillRect(band.x, band.y, band.w, band.h));
-    ctx.restore();
 
     roundedRect(ctx, BOARD.x, BOARD.y, BOARD.w, BOARD.h, 8);
     ctx.fillStyle = "rgba(255, 223, 155, 0.18)";
@@ -1584,30 +1661,6 @@
     ctx.strokeStyle = "rgba(255, 255, 255, 0.58)";
     ctx.stroke();
 
-    if (piece.maxMark) {
-      ctx.save();
-      ctx.shadowBlur = 0;
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      ctx.lineWidth = Math.max(4, piece.r * 0.12);
-      ctx.strokeStyle = "rgba(255, 232, 112, 0.94)";
-      ctx.beginPath();
-      ctx.moveTo(-piece.r * 0.42, -piece.r * 0.56);
-      ctx.lineTo(piece.r * 0.1, -piece.r * 0.12);
-      ctx.lineTo(-piece.r * 0.04, -piece.r * 0.1);
-      ctx.lineTo(piece.r * 0.42, piece.r * 0.55);
-      ctx.stroke();
-      ctx.lineWidth = Math.max(2, piece.r * 0.045);
-      ctx.strokeStyle = "rgba(255, 250, 198, 0.78)";
-      ctx.beginPath();
-      ctx.moveTo(-piece.r * 0.5, piece.r * 0.08);
-      ctx.lineTo(-piece.r * 0.18, piece.r * 0.34);
-      ctx.moveTo(piece.r * 0.18, -piece.r * 0.46);
-      ctx.lineTo(piece.r * 0.5, -piece.r * 0.2);
-      ctx.stroke();
-      ctx.restore();
-    }
-
     ctx.beginPath();
     ctx.arc(-piece.r * 0.28, -piece.r * 0.38, piece.r * 0.22, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255, 255, 255, 0.58)";
@@ -1626,16 +1679,7 @@
     ctx.lineJoin = "round";
 
     const r = piece.r * 0.45;
-    if (piece.size === "large") {
-      ctx.beginPath();
-      ctx.arc(0, 0, r, Math.PI * 0.15, Math.PI * 1.35);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(-r * 0.6, r * 0.05);
-      ctx.lineTo(r * 0.68, -r * 0.36);
-      ctx.lineTo(r * 0.16, r * 0.72);
-      ctx.stroke();
-    } else if (piece.symbol === 0) {
+    if (piece.symbol === 0) {
       ctx.beginPath();
       ctx.moveTo(-r, 0);
       ctx.lineTo(r, 0);
