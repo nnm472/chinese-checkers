@@ -285,6 +285,19 @@ button {
   opacity: 1;
 }
 
+.skill-button.is-powering {
+  color: #fffdf0;
+  border-color: rgba(255, 225, 92, 0.98);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 225, 92, 0.9),
+    0 0 20px rgba(255, 225, 92, 0.42);
+}
+
+.skill-button.is-powering .skill-fill {
+  background: linear-gradient(90deg, rgba(255, 225, 92, 0.92), rgba(255, 255, 255, 0.22));
+  opacity: 1;
+}
+
 .skill-announcement {
   position: fixed;
   z-index: 20;
@@ -573,7 +586,8 @@ button {
 .mini-drop-zone,
 .mini-fall-line,
 .mini-v-arrow,
-.mini-victory-line {
+.mini-victory-line,
+.mini-pull-ring {
   position: absolute;
 }
 
@@ -596,6 +610,29 @@ button {
 .mini-pull {
   width: 78px;
   border-top: 4px dashed rgba(255, 255, 255, 0.82);
+}
+
+.mini-pull-ring {
+  border: 3px solid rgba(255, 246, 205, 0.55);
+  border-radius: 50%;
+  box-shadow: 0 0 16px rgba(255, 246, 205, 0.18);
+}
+
+.mini-pull-ring--one {
+  width: 88px;
+  height: 88px;
+}
+
+.mini-pull-ring--two {
+  width: 116px;
+  height: 116px;
+  opacity: 0.72;
+}
+
+.mini-pull-ring--three {
+  width: 144px;
+  height: 144px;
+  opacity: 0.48;
 }
 
 .mini-bumper {
@@ -635,16 +672,16 @@ button {
 }
 
 .mini-drop-zone {
-  width: 68px;
-  height: 60px;
-  display: grid;
-  place-items: center;
-  border: 3px dashed rgba(255, 255, 255, 0.82);
+  width: 74px;
+  height: 68px;
   border-radius: 8px;
-  color: #fff7e8;
-  background: rgba(8, 8, 7, 0.22);
-  font-size: 0.82rem;
-  font-weight: 900;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 247, 232, 0.16) 0 5px,
+      rgba(20, 18, 15, 0.12) 5px 12px
+    ),
+    rgba(25, 23, 19, 0.18);
 }
 
 .mini-fall-line {
@@ -658,15 +695,15 @@ button {
   inset: 0;
   width: 100%;
   height: 100%;
-  fill: #f7e46c;
-  stroke: #f7e46c;
+  fill: none;
+  stroke: #ff6c6c;
   stroke-width: 6;
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: none;
 }
 
-.mini-v-arrow path {
+.mini-v-head {
   fill: none;
 }
 
@@ -696,16 +733,17 @@ button {
   min-width: 0;
   min-height: 0;
   padding: 6px 10px;
-  display: grid;
-  align-content: center;
-  gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   border-radius: 8px;
   color: #fff7e8;
   background: rgba(30, 27, 21, 0.72);
   border: 1px solid rgba(255, 247, 232, 0.24);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
-  font-size: 0.92rem;
+  font-size: 0.78rem;
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .tutorial-board--skills .mini-skill {
@@ -714,13 +752,12 @@ button {
 
 .mini-skill strong,
 .mini-skill small {
-  display: block;
   line-height: 1.15;
 }
 
 .mini-skill small {
   color: #eadfc4;
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   font-weight: 800;
 }
 

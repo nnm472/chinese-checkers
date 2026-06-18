@@ -41,6 +41,9 @@
   const CPU_ATTACK_MAX_ANGLE_ERROR = 3.0;
   const CPU_CENTER_ANGLE_ERROR = 4.0;
   const CPU_PREVIEW_DELAY_MS = 500;
+  const CPU_POWER_ANNOUNCE_DELAY_MS = 1800;
+  const CPU_POWER_PREVIEW_GAP_MS = 120;
+  const CPU_TARGET_RANDOMNESS = 0.72;
   const RESULT_DELAY_MS = 1000;
 
   const COLORS = {
@@ -135,6 +138,9 @@
       text: "自分の色のコマを選び、引いた方向と反対へ発射します。",
       art: `
         <div class="tutorial-board tutorial-board--pull">
+          <span class="mini-pull-ring mini-pull-ring--one" style="left: 92px; top: 28px;"></span>
+          <span class="mini-pull-ring mini-pull-ring--two" style="left: 78px; top: 14px;"></span>
+          <span class="mini-pull-ring mini-pull-ring--three" style="left: 64px; top: 0;"></span>
           <span class="mini-piece mini-piece--large red" style="left: 108px; top: 44px;"></span>
           <span class="mini-pull" style="left: 34px; top: 76px;"></span>
           <span class="mini-arrow" style="left: 172px; top: 76px;"></span>
@@ -146,8 +152,8 @@
       text: "上下左右どこから出ても落下です。自分のコマを落とさないようにしましょう。",
       art: `
         <div class="tutorial-board tutorial-board--drop">
-          <span class="mini-piece red mini-piece--falling" style="right: -19px; bottom: 34px;"></span>
-          <span class="mini-drop-zone" style="right: -28px; bottom: 22px;">盤外</span>
+          <span class="mini-piece red mini-piece--falling" style="right: -20px; bottom: 38px;"></span>
+          <span class="mini-drop-zone" style="right: -30px; bottom: 20px;"></span>
           <span class="mini-fall-line"></span>
         </div>
       `,
@@ -157,15 +163,11 @@
       text: "盤の中央にある水平の蝶番はコマが跳ね返ります。",
       art: `
         <div class="tutorial-board tutorial-board--bounce">
-          <span class="mini-bumper" style="left: 28px; top: 72px;"></span>
-          <span class="mini-piece red" style="left: 78px; top: 30px;"></span>
+          <span class="mini-bumper" style="left: 28px; top: 76px;"></span>
+          <span class="mini-piece red" style="left: 60px; top: 26px;"></span>
           <svg class="mini-v-arrow" viewBox="0 0 250 130" aria-hidden="true">
-            <defs>
-              <marker id="miniArrowHead" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
-                <path d="M0,0 L9,4.5 L0,9 Z"></path>
-              </marker>
-            </defs>
-            <path d="M94 48 L112 82 L170 38" marker-end="url(#miniArrowHead)"></path>
+            <path d="M80 50 L112 88 L176 42"></path>
+            <polyline class="mini-v-head" points="176,42 160,43 168,56"></polyline>
           </svg>
         </div>
       `,
@@ -220,6 +222,10 @@
       green: 0,
     },
     powerBoostTeam: null,
+    powerStacks: {
+      red: 0,
+      green: 0,
+    },
     skipCredits: {
       red: 0,
       green: 0,
@@ -267,36 +273,54 @@
 
   function makeWoodPattern() {
     const offscreen = document.createElement("canvas");
-    offscreen.width = 360;
-    offscreen.height = 360;
+    offscreen.width = 1200;
+    offscreen.height = 1500;
     const g = offscreen.getContext("2d");
-    const gradient = g.createLinearGradient(0, 0, 360, 0);
-    gradient.addColorStop(0, "#b97731");
-    gradient.addColorStop(0.35, "#dda85a");
-    gradient.addColorStop(0.72, "#c4863d");
-    gradient.addColorStop(1, "#f0c878");
-    g.fillStyle = gradient;
-    g.fillRect(0, 0, 360, 360);
+    const base = g.createLinearGradient(0, 0, offscreen.width, offscreen.height);
+    base.addColorStop(0, "#b97632");
+    base.addColorStop(0.34, "#d89b4c");
+    base.addColorStop(0.68, "#bc7d35");
+    base.addColorStop(1, "#e8bd67");
+    g.fillStyle = base;
+    g.fillRect(0, 0, offscreen.width, offscreen.height);
 
-    for (let x = -20; x < 390; x += 18) {
-      const alpha = 0.12 + ((x * 13) % 9) / 100;
-      g.strokeStyle = `rgba(70, 38, 15, ${alpha})`;
-      g.lineWidth = 2 + ((x * 7) % 4);
+    let x = -28;
+    let plank = 0;
+    while (x < offscreen.width + 40) {
+      const width = 56 + ((plank * 37) % 46);
+      const shade = plank % 3 === 0 ? "rgba(255, 231, 164, 0.18)" : "rgba(83, 48, 20, 0.1)";
+      g.fillStyle = shade;
+      g.fillRect(x, 0, width, offscreen.height);
+      g.strokeStyle = "rgba(66, 38, 17, 0.16)";
+      g.lineWidth = 3;
       g.beginPath();
-      g.moveTo(x, 0);
-      for (let y = 0; y <= 360; y += 36) {
-        g.lineTo(x + Math.sin(y * 0.035 + x) * 8, y);
-      }
+      g.moveTo(x + width, 0);
+      g.lineTo(x + width, offscreen.height);
       g.stroke();
+
+      for (let line = 0; line < 5; line += 1) {
+        const offset = ((line * 19 + plank * 23) % Math.max(12, width - 8)) + 4;
+        const alpha = 0.08 + ((line + plank) % 4) * 0.025;
+        g.strokeStyle = `rgba(70, 38, 15, ${alpha})`;
+        g.lineWidth = 1.4 + ((line + plank) % 3) * 0.7;
+        g.beginPath();
+        g.moveTo(x + offset, 0);
+        for (let y = 0; y <= offscreen.height; y += 44) {
+          g.lineTo(x + offset + Math.sin(y * 0.02 + plank * 0.8 + line) * 9, y);
+        }
+        g.stroke();
+      }
+      x += width;
+      plank += 1;
     }
 
-    for (let i = 0; i < 36; i += 1) {
-      const x = (i * 71) % 360;
-      const y = (i * 47) % 360;
-      g.strokeStyle = "rgba(85, 49, 22, 0.14)";
-      g.lineWidth = 1.5;
+    for (let i = 0; i < 90; i += 1) {
+      const knotX = (i * 137) % offscreen.width;
+      const knotY = (i * 211) % offscreen.height;
+      g.strokeStyle = "rgba(81, 48, 22, 0.13)";
+      g.lineWidth = 1.4;
       g.beginPath();
-      g.ellipse(x, y, 26, 8, (i % 5) * 0.7, 0, Math.PI * 2);
+      g.ellipse(knotX, knotY, 34 + (i % 4) * 5, 9 + (i % 3) * 2, (i % 6) * 0.55, 0, Math.PI * 2);
       g.stroke();
     }
 
@@ -374,6 +398,8 @@
     state.skillPoints.red = 0;
     state.skillPoints.green = 0;
     state.powerBoostTeam = null;
+    state.powerStacks.red = 0;
+    state.powerStacks.green = 0;
     state.skipCredits.red = 0;
     state.skipCredits.green = 0;
     state.pendingSkill = null;
@@ -399,7 +425,7 @@
   function currentStatusText() {
     if (isCpuTurn() || state.cpuThinking) return "CPU思考中";
     if (state.phase === "ready") {
-      return state.powerBoostTeam === state.turn ? "Power強化中" : "コマを選択";
+      return getPowerStacks(state.turn) > 0 ? "Power強化中" : "コマを選択";
     }
     if (state.phase === "aiming") return "狙いを決める";
     if (state.phase === "moving") return "移動中";
@@ -444,12 +470,15 @@
       const ratio = Math.min(points / skill.cost, 1);
       const fill = button.querySelector(".skill-fill");
       const isReady = points >= skill.cost;
+      const isPowering = button.dataset.skill === "power" && getPowerStacks(team) > 0;
 
       if (fill) fill.style.setProperty("--fill", `${Math.round(ratio * 100)}%`);
       button.classList.toggle("is-ready", isReady);
+      button.classList.toggle("is-powering", isPowering);
       const readyText = isReady ? "使用可能" : "準備中";
-      button.title = `${COLORS[team].name}: ${skill.label} ${readyText}`;
-      button.setAttribute("aria-label", `${COLORS[team].name} ${skill.label} ${readyText}`);
+      const activeText = isPowering ? " 効果中" : "";
+      button.title = `${COLORS[team].name}: ${skill.label} ${readyText}${activeText}`;
+      button.setAttribute("aria-label", `${COLORS[team].name} ${skill.label} ${readyText}${activeText}`);
     });
   }
 
@@ -461,6 +490,24 @@
   function consumeSkillPoints(team, cost) {
     state.skillPoints[team] = Math.max(0, state.skillPoints[team] - cost);
     updateHud();
+  }
+
+  function getPowerStacks(team) {
+    return state.powerStacks?.[team] || 0;
+  }
+
+  function addPowerBoost(team) {
+    state.powerStacks[team] = getPowerStacks(team) + 1;
+    state.powerBoostTeam = team;
+  }
+
+  function clearPowerBoost(team) {
+    state.powerStacks[team] = 0;
+    if (!getPowerStacks("red") && !getPowerStacks("green")) {
+      state.powerBoostTeam = null;
+    } else if (state.powerBoostTeam === team) {
+      state.powerBoostTeam = getPowerStacks("red") ? "red" : "green";
+    }
   }
 
   function showSkillAnnouncement(team, icon, text, duration = 1800) {
@@ -482,9 +529,8 @@
   }
 
   function getMaxDrag(piece = state.selected) {
-    return state.powerBoostTeam && piece && state.powerBoostTeam === piece.team
-      ? MAX_DRAG * POWER_DRAG_MULTIPLIER
-      : MAX_DRAG;
+    const stacks = piece ? getPowerStacks(piece.team) : 0;
+    return stacks > 0 ? MAX_DRAG * Math.pow(POWER_DRAG_MULTIPLIER, stacks) : MAX_DRAG;
   }
 
   function tryUseSkill(team, skillKey) {
@@ -514,7 +560,7 @@
     consumeSkillPoints(team, skill.cost);
 
     if (skillKey === "power") {
-      state.powerBoostTeam = team;
+      addPowerBoost(team);
       showSkillAnnouncement(team, skill.label, "この手番だけ威力アップ");
       updateHud();
       setStatusText("Power発動: 威力アップ");
@@ -795,6 +841,11 @@
     return 1 - clampNumber(nearestEdge / 260, 0, 1);
   }
 
+  function cpuAttackScore(candidate) {
+    const closeScore = 1 - clampNumber(candidate.dist / 950, 0, 1);
+    return candidate.edge * 2.25 + closeScore * 1.1 + Math.random() * CPU_TARGET_RANDOMNESS;
+  }
+
   function hasFriendlyBeyondTarget(shot) {
     if (shot.kind !== "attack") return false;
     const { piece, target, dist } = shot;
@@ -858,8 +909,8 @@
     }
 
     state.skillPoints[state.cpuTeam] = Math.max(0, state.skillPoints[state.cpuTeam] - skill.cost);
-    state.powerBoostTeam = state.cpuTeam;
-    showSkillAnnouncement(state.cpuTeam, skill.label, "CPUがこの手番だけ威力アップ", 1500);
+    addPowerBoost(state.cpuTeam);
+    showSkillAnnouncement(state.cpuTeam, skill.label, "この手番だけ威力アップ", CPU_POWER_ANNOUNCE_DELAY_MS);
     setStatusText("CPUがPower発動");
     updateSkillMeters();
     return true;
@@ -875,12 +926,14 @@
       enemies.forEach((target) => {
         const dist = Math.hypot(target.x - piece.x, target.y - piece.y);
         if (isCpuLineClear(piece, target)) {
-          candidates.push({ piece, target, dist, edge: edgePressure(target), kind: "attack" });
+          const candidate = { piece, target, dist, edge: edgePressure(target), kind: "attack" };
+          candidate.score = cpuAttackScore(candidate);
+          candidates.push(candidate);
         }
       });
     });
 
-    candidates.sort((a, b) => b.edge - a.edge || a.dist - b.dist);
+    candidates.sort((a, b) => b.score - a.score);
     if (candidates.length) return candidates[0];
 
     const center = { x: BOARD.x + BOARD.w / 2, y: BOARD.y + BOARD.h / 2 };
@@ -918,7 +971,7 @@
     const massSpeedOffset = 0.84 + piece.mass * 0.07;
     const clampedPower = clampNumber(powerRatio, CPU_MIN_POWER, 1);
     const virtualDrag = getMaxDrag(piece) * clampedPower;
-    const boost = state.powerBoostTeam === piece.team ? POWER_LAUNCH_MULTIPLIER : 1;
+    const boost = Math.pow(POWER_LAUNCH_MULTIPLIER, getPowerStacks(piece.team));
     const launchScale = (8.35 * LAUNCH_POWER * boost) / massSpeedOffset;
     piece.vx = ux * virtualDrag * launchScale;
     piece.vy = uy * virtualDrag * launchScale;
@@ -940,26 +993,45 @@
     const usedPower = maybeUseCpuPower(shot);
     const ratio = cpuPowerRatio(shot, usedPower);
     const angleOffset = cpuAngleErrorRadians(shot);
-    state.cpuPreview = {
-      piece: shot.piece,
-      target: shot.target,
-      power: ratio,
-      angleOffset,
-      powered: usedPower,
-    };
-    updateHudForCpuThinking();
-    state.cpuTimer = window.setTimeout(() => {
-      const preview = state.cpuPreview;
+
+    const beginPreview = () => {
       state.cpuTimer = null;
-      state.cpuPreview = null;
-      if (!preview || state.overlay || state.turn !== state.cpuTeam || state.phase !== "ready") {
+      if (state.overlay || state.turn !== state.cpuTeam || state.phase !== "ready") {
         state.cpuThinking = false;
         updateHud();
         return;
       }
-      state.cpuThinking = false;
-      launchPieceToward(preview.piece, preview.target, preview.power, preview.angleOffset);
-    }, CPU_PREVIEW_DELAY_MS);
+      state.cpuPreview = {
+        piece: shot.piece,
+        target: shot.target,
+        power: ratio,
+        angleOffset,
+        powered: usedPower,
+      };
+      updateHudForCpuThinking();
+      state.cpuTimer = window.setTimeout(() => {
+        const preview = state.cpuPreview;
+        state.cpuTimer = null;
+        state.cpuPreview = null;
+        if (!preview || state.overlay || state.turn !== state.cpuTeam || state.phase !== "ready") {
+          state.cpuThinking = false;
+          updateHud();
+          return;
+        }
+        state.cpuThinking = false;
+        launchPieceToward(preview.piece, preview.target, preview.power, preview.angleOffset);
+      }, CPU_PREVIEW_DELAY_MS);
+    };
+
+    updateHudForCpuThinking();
+    if (usedPower) {
+      state.cpuTimer = window.setTimeout(
+        beginPreview,
+        CPU_POWER_ANNOUNCE_DELAY_MS + CPU_POWER_PREVIEW_GAP_MS,
+      );
+      return;
+    }
+    beginPreview();
   }
 
   function findPieceAt(point, teamFilter = state.turn) {
@@ -1032,7 +1104,7 @@
 
     const piece = state.selected;
     const massSpeedOffset = 0.84 + piece.mass * 0.07;
-    const boost = state.powerBoostTeam === piece.team ? POWER_LAUNCH_MULTIPLIER : 1;
+    const boost = Math.pow(POWER_LAUNCH_MULTIPLIER, getPowerStacks(piece.team));
     const launchScale = (8.35 * LAUNCH_POWER * boost) / massSpeedOffset;
     piece.vx = -drag.x * launchScale;
     piece.vy = -drag.y * launchScale;
@@ -1235,9 +1307,7 @@
     addSkillPoints(actingTeam, 1);
     if (checkVictory()) return;
 
-    if (state.powerBoostTeam === actingTeam) {
-      state.powerBoostTeam = null;
-    }
+    clearPowerBoost(actingTeam);
 
     if (state.skipCredits[actingTeam] > 0) {
       state.skipCredits[actingTeam] -= 1;
@@ -1315,18 +1385,38 @@
     ctx.fillRect(24, 24, VIEW_W - 48, VIEW_H - 48);
     ctx.restore();
 
+    ctx.save();
     roundedRect(ctx, DROP_BOUNDS.x, DROP_BOUNDS.y, DROP_BOUNDS.w, DROP_BOUNDS.h, 12);
-    ctx.fillStyle = "rgba(72, 42, 18, 0.14)";
-    ctx.fill();
+    ctx.clip();
+    const dropGradient = ctx.createLinearGradient(DROP_BOUNDS.x, DROP_BOUNDS.y, DROP_BOUNDS.x, DROP_BOUNDS.y + DROP_BOUNDS.h);
+    dropGradient.addColorStop(0, "rgba(232, 228, 206, 0.24)");
+    dropGradient.addColorStop(0.5, "rgba(50, 45, 36, 0.2)");
+    dropGradient.addColorStop(1, "rgba(232, 228, 206, 0.2)");
+    ctx.fillStyle = dropGradient;
+    ctx.fillRect(DROP_BOUNDS.x, DROP_BOUNDS.y, DROP_BOUNDS.w, DROP_BOUNDS.h);
+    ctx.strokeStyle = "rgba(255, 247, 224, 0.12)";
+    ctx.lineWidth = 3;
+    for (let x = DROP_BOUNDS.x - DROP_BOUNDS.h; x < DROP_BOUNDS.x + DROP_BOUNDS.w; x += 44) {
+      ctx.beginPath();
+      ctx.moveTo(x, DROP_BOUNDS.y + DROP_BOUNDS.h);
+      ctx.lineTo(x + DROP_BOUNDS.h, DROP_BOUNDS.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    roundedRect(ctx, DROP_BOUNDS.x, DROP_BOUNDS.y, DROP_BOUNDS.w, DROP_BOUNDS.h, 12);
     ctx.lineWidth = 6;
-    ctx.strokeStyle = "rgba(36, 22, 12, 0.92)";
+    ctx.strokeStyle = "rgba(32, 29, 24, 0.92)";
     ctx.stroke();
 
     roundedRect(ctx, BOARD.x, BOARD.y, BOARD.w, BOARD.h, 8);
     ctx.fillStyle = "rgba(255, 223, 155, 0.18)";
     ctx.fill();
     ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(48, 28, 13, 0.78)";
+    ctx.strokeStyle = "rgba(255, 246, 218, 0.62)";
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(42, 26, 14, 0.86)";
     ctx.stroke();
 
     drawGrid();
@@ -1568,7 +1658,7 @@
       ctx.lineWidth = 3;
       ctx.stroke();
     }
-    if (state.powerBoostTeam === piece.team) {
+    if (getPowerStacks(piece.team) > 0) {
       ctx.beginPath();
       ctx.arc(piece.x, piece.y, maxDrag, 0, Math.PI * 2);
       ctx.strokeStyle = "rgba(255, 224, 109, 0.28)";
