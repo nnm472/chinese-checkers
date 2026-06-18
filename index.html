@@ -9,13 +9,16 @@
   <body>
     <div class="app" id="app">
       <header class="app-header">
-        <div>
+        <div class="app-title">
           <p class="eyebrow">Offline Duel</p>
           <h1>中国のチェッカー</h1>
         </div>
-        <button class="icon-button" id="pauseButton" type="button" aria-label="設定" title="設定">
-          <span aria-hidden="true">☰</span>
-        </button>
+        <div class="header-actions">
+          <button class="ghost-button header-help" id="helpButton" type="button">ヘルプ</button>
+          <button class="icon-button" id="pauseButton" type="button" aria-label="設定" title="設定">
+            <span aria-hidden="true">☰</span>
+          </button>
+        </div>
       </header>
 
       <main class="game-shell" aria-label="対戦画面">
@@ -23,6 +26,10 @@
           <div class="player-main">
             <span class="team-dot team-dot--green"></span>
             <span class="player-name">緑</span>
+          </div>
+          <div class="turn-summary">
+            <span id="greenTurnLabel">緑の手番</span>
+            <span id="greenStatusLabel">待機中</span>
           </div>
           <div class="player-meta">
             <span id="greenCount">16</span>
@@ -53,18 +60,8 @@
           </button>
         </section>
 
-        <div class="turn-strip turn-strip--green facing-green" id="greenTurnStrip">
-          <span id="greenTurnLabel">緑の手番</span>
-          <span id="greenStatusLabel">待機中</span>
-        </div>
-
         <div class="board-frame">
           <canvas id="gameCanvas" width="1000" height="1292" aria-label="ゲーム盤"></canvas>
-        </div>
-
-        <div class="turn-strip turn-strip--red" id="redTurnStrip">
-          <span id="redTurnLabel">赤の手番</span>
-          <span id="redStatusLabel">コマを選択</span>
         </div>
 
         <section class="skill-row skill-row--bottom" aria-label="赤チームのスキル">
@@ -95,9 +92,9 @@
             <span class="team-dot team-dot--red"></span>
             <span class="player-name">赤</span>
           </div>
-          <div class="quick-actions">
-            <button class="ghost-button" id="helpButton" type="button">ヘルプ</button>
-            <button class="ghost-button" id="restartButton" type="button">最初から</button>
+          <div class="turn-summary">
+            <span id="redTurnLabel">赤の手番</span>
+            <span id="redStatusLabel">コマを選択</span>
           </div>
           <div class="player-meta">
             <span id="redCount">16</span>

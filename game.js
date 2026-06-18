@@ -81,7 +81,6 @@
     tutorialButton: document.getElementById("tutorialButton"),
     pauseButton: document.getElementById("pauseButton"),
     helpButton: document.getElementById("helpButton"),
-    restartButton: document.getElementById("restartButton"),
     resumeButton: document.getElementById("resumeButton"),
     pauseRestartButton: document.getElementById("pauseRestartButton"),
     backToTitleButton: document.getElementById("backToTitleButton"),
@@ -93,8 +92,8 @@
     skillAnnouncementIcon: document.getElementById("skillAnnouncementIcon"),
     skillAnnouncementTeam: document.getElementById("skillAnnouncementTeam"),
     skillAnnouncementText: document.getElementById("skillAnnouncementText"),
-    redTurnStrip: document.getElementById("redTurnStrip"),
-    greenTurnStrip: document.getElementById("greenTurnStrip"),
+    redPanel: document.querySelector(".player-panel--red"),
+    greenPanel: document.querySelector(".player-panel--green"),
     redTurnLabel: document.getElementById("redTurnLabel"),
     greenTurnLabel: document.getElementById("greenTurnLabel"),
     redStatusLabel: document.getElementById("redStatusLabel"),
@@ -379,8 +378,8 @@
     el.greenCount.textContent = String(green);
     el.redTurnLabel.textContent = state.turn === "red" ? "赤の手番" : "赤は待機";
     el.greenTurnLabel.textContent = state.turn === "green" ? "緑の手番" : "緑は待機";
-    el.redTurnStrip.classList.toggle("is-active", state.turn === "red");
-    el.greenTurnStrip.classList.toggle("is-active", state.turn === "green");
+    el.redPanel.classList.toggle("is-active", state.turn === "red");
+    el.greenPanel.classList.toggle("is-active", state.turn === "green");
 
     const status = currentStatusText();
     el.redStatusLabel.textContent = state.turn === "red" ? status : "待機中";
@@ -1387,7 +1386,6 @@
       if (state.overlay === "title" || state.overlay === "tutorial" || state.overlay === "result") return;
       setOverlay("pause");
     });
-    el.restartButton.addEventListener("click", () => startMatch(state.mode));
     el.resumeButton.addEventListener("click", () => setOverlay(null));
     el.pauseRestartButton.addEventListener("click", () => startMatch(state.mode));
     el.backToTitleButton.addEventListener("click", showTitle);
