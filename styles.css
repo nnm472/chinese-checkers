@@ -47,7 +47,7 @@ button {
 
 .app {
   width: min(100%, 560px);
-  height: 100dvh;
+  height: var(--app-height, 100dvh);
   margin: 0 auto;
   padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
   display: flex;
@@ -357,15 +357,17 @@ button {
 
 .board-frame {
   min-height: 0;
-  flex: 1;
+  flex: 1 1 0;
   display: grid;
   place-items: center;
+  overflow: hidden;
 }
 
 #gameCanvas {
-  width: min(100%, calc((100dvh - 244px) * 0.774));
+  width: min(100%, 540px);
+  height: auto;
   max-width: 540px;
-  max-height: calc(100dvh - 244px);
+  max-height: 100%;
   aspect-ratio: 1000 / 1292;
   display: block;
   border-radius: 8px;
@@ -612,7 +614,7 @@ button {
   }
 
   #gameCanvas {
-    max-height: calc(100dvh - 214px);
-    width: min(100%, calc((100dvh - 214px) * 0.774));
+    width: min(100%, 540px);
+    max-height: 100%;
   }
 }

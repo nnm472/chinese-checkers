@@ -1,6 +1,7 @@
 (() => {
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
+  const boardFrame = document.querySelector(".board-frame");
 
   const VIEW_W = 1000;
   const VIEW_H = 1292;
@@ -190,12 +191,38 @@
   };
 
   let woodPattern = null;
+  let boardResizeObserver = null;
+
+  function syncViewportHeight() {
+    const height = window.visualViewport?.height || window.innerHeight;
+    if (height > 0) {
+      document.documentElement.style.setProperty("--app-height", `${height}px`);
+    }
+  }
+
+  function fitCanvasToFrame() {
+    if (!boardFrame) return;
+    const rect = boardFrame.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const maxWidth = Math.min(rect.width, 540);
+    const scale = Math.min(maxWidth / VIEW_W, rect.height / VIEW_H);
+    const displayWidth = Math.floor(VIEW_W * scale);
+    const displayHeight = Math.floor(VIEW_H * scale);
+
+    if (displayWidth > 0 && displayHeight > 0) {
+      canvas.style.width = `${displayWidth}px`;
+      canvas.style.height = `${displayHeight}px`;
+    }
+  }
 
   function resizeCanvas() {
+    syncViewportHeight();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = VIEW_W * dpr;
     canvas.height = VIEW_H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    requestAnimationFrame(fitCanvasToFrame);
   }
 
   function makeWoodPattern() {
@@ -1395,6 +1422,14 @@
     });
 
     window.addEventListener("resize", resizeCanvas);
+    window.addEventListener("orientationchange", resizeCanvas);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", resizeCanvas);
+    }
+    if ("ResizeObserver" in window && boardFrame) {
+      boardResizeObserver = new ResizeObserver(fitCanvasToFrame);
+      boardResizeObserver.observe(boardFrame);
+    }
   }
 
   function init() {
